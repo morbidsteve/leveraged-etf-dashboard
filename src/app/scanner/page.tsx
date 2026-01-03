@@ -296,6 +296,56 @@ export default function ScannerPage() {
         </div>
       )}
 
+      {/* Methodology Explanation - shown after scan */}
+      {results.length > 0 && (
+        <div className="card mb-6">
+          <div className="card-header">
+            <h2 className="font-medium text-white flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Scan Methodology
+            </h2>
+          </div>
+          <div className="card-body text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="font-medium text-white mb-2">What This Scanner Does</h3>
+                <p className="text-gray-400 mb-3">
+                  Analyzes <span className="text-white font-mono">60 days</span> of <span className="text-white font-mono">5-minute</span> intraday
+                  candle data (~4,700 data points per ETF) to backtest RSI reversal signals.
+                </p>
+                <div className="space-y-2 text-gray-400">
+                  <p><span className="text-profit font-medium">Signal Trigger:</span> RSI({period}) crosses below {oversold}</p>
+                  <p><span className="text-profit font-medium">Target:</span> Price gains 1.5% or 2% from entry</p>
+                  <p><span className="text-profit font-medium">Time Window:</span> ~1 week (~500 five-minute bars)</p>
+                  <p><span className="text-profit font-medium">Win Rate:</span> % of signals that hit target within window</p>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-medium text-white mb-2">Column Definitions</h3>
+                <div className="space-y-1.5 text-gray-400">
+                  <p><span className="text-white">Signals:</span> Number of times RSI crossed below {oversold} in past 60 days</p>
+                  <p><span className="text-white">Win Rate (1.5%):</span> % of signals where price hit +1.5% within ~1 week</p>
+                  <p><span className="text-white">Win Rate (2%):</span> % of signals where price hit +2% within ~1 week</p>
+                  <p><span className="text-white">Avg Time:</span> Average time to reach 1.5% target (when successful)</p>
+                  <p><span className="text-white">Avg Max Gain:</span> Average peak gain reached per signal</p>
+                  <p><span className="text-white">Avg Max DD:</span> Average max drawdown before target hit</p>
+                  <p><span className="text-white">Score:</span> Composite: 50% win rate + 30% risk/reward + 20% sample size</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 p-3 bg-dark-bg rounded-lg">
+              <p className="text-gray-400">
+                <span className="text-yellow-400 font-medium">Interpretation:</span> ETFs with high win rates ({'>'}60%)
+                and multiple signals ({'>'}3) suggest a repeatable pattern. {'"'}OVERSOLD{'"'} badge means the ETF is
+                <em> currently</em> below RSI {oversold} and may present an opportunity based on historical behavior.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Results Table */}
       {results.length > 0 && (
         <div className="card">
@@ -304,9 +354,6 @@ export default function ScannerPage() {
               <h2 className="font-medium text-white">
                 Scan Results ({filteredResults.length} of {results.filter(r => !r.error).length} ETFs)
               </h2>
-              {scanNote && (
-                <p className="text-xs text-gray-500 mt-1">{scanNote}</p>
-              )}
             </div>
             {lastScan && (
               <span className="text-xs text-gray-500">
