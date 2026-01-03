@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { MainLayout } from '@/components/Layout';
 import { useTradeStore, usePriceStore } from '@/store';
+import { useStoreHydration } from '@/hooks';
 import { Trade, TradeFilters } from '@/types';
 import {
   formatCurrency,
@@ -17,6 +18,7 @@ import {
 import { format } from 'date-fns';
 
 export default function TradesPage() {
+  const storeHydrated = useStoreHydration();
   const trades = useTradeStore((state) => state.trades);
   const deleteTrade = useTradeStore((state) => state.deleteTrade);
   const prices = usePriceStore((state) => state.prices);
@@ -87,6 +89,16 @@ export default function TradesPage() {
       deleteTrade(id);
     }
   };
+
+  if (!storeHydrated) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[400px] text-gray-500">
+          <span className="animate-pulse">Loading trades...</span>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>

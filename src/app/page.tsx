@@ -6,13 +6,14 @@ import { PriceDisplay } from '@/components/Price';
 import { RSIIndicator, RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
 import { QuickStats, OpenPositions } from '@/components/Dashboard';
-import { usePriceData, useHydration } from '@/hooks';
+import { usePriceData, useHydration, useStoreHydration } from '@/hooks';
 import { useTradeStore, usePriceStore } from '@/store';
 import { calculatePortfolioSummary } from '@/lib/calculations';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 
 export default function DashboardPage() {
   const hydrated = useHydration();
+  const storeHydrated = useStoreHydration();
 
   const { priceData, candles, rsiData, isLoading, error, refresh } = usePriceData({
     ticker: 'TQQQ',
@@ -29,7 +30,7 @@ export default function DashboardPage() {
     return calculatePortfolioSummary(trades);
   }, [trades]);
 
-  if (!hydrated) {
+  if (!hydrated || !storeHydrated) {
     return (
       <MainLayout>
         <div className="flex items-center justify-center h-[500px] text-gray-500">

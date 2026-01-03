@@ -105,10 +105,16 @@ export function calculateRSIWithTimestamps(
   candles: Candle[],
   period: number = DEFAULT_RSI_CONFIG.period
 ): { time: number; value: number }[] {
+  if (candles.length < period + 1) {
+    return [];
+  }
+
   const rsiValues = calculateRSI(candles, period);
 
   // RSI values start from candle index (period)
   // because we need 'period' candles to calculate the first RSI
+  // rsiValues[0] corresponds to candles[period]
+  // rsiValues[n] corresponds to candles[period + n]
   return rsiValues.map((value, index) => ({
     time: candles[index + period].time,
     value,

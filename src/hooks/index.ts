@@ -1,2 +1,2 @@
 export { usePriceData } from './usePriceData';
-export { useHydration } from './useHydration';
+export { useHydration, useStoreHydration } from './useHydration';
