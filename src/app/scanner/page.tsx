@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { MainLayout } from '@/components/Layout';
 import { formatCurrency, formatPercent } from '@/lib/calculations';
+import { useSettingsStore, DEFAULT_SCANNER_SETTINGS } from '@/store';
 
 interface TimeframeMetrics {
   totalSignals: number;
@@ -280,26 +281,40 @@ function ExpandedDetail({ result, oversold }: { result: ScanResult; oversold: nu
 }
 
 export default function ScannerPage() {
+  const { settings, updateScannerSettings } = useSettingsStore();
+  const scannerSettings = settings.scannerSettings || DEFAULT_SCANNER_SETTINGS;
+
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<ScanResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastScan, setLastScan] = useState<string | null>(null);
   const [methodology, setMethodology] = useState<Methodology | null>(null);
-  const [dataSource, setDataSource] = useState<'yahoo' | 'finnhub'>('yahoo');
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
 
-  // Scanner settings - defaults for intraday analysis
-  const [period, setPeriod] = useState(14); // Standard 14-period RSI
-  const [oversold, setOversold] = useState(50); // User's preferred threshold
+  // Scanner settings - initialize from persisted settings
+  const [period, setPeriod] = useState(scannerSettings.rsiPeriod);
+  const [oversold, setOversold] = useState(scannerSettings.oversoldThreshold);
+  const [dataSource, setDataSource] = useState<'yahoo' | 'finnhub'>(scannerSettings.dataSource);
   const [customSymbols, setCustomSymbols] = useState('');
-  const [minWinRate, setMinWinRate] = useState(0); // Default to 0 to show all
-  const [minSignals, setMinSignals] = useState(1); // Default to 1 to show all with any signals
+  const [minWinRate, setMinWinRate] = useState(scannerSettings.minWinRate);
+  const [minSignals, setMinSignals] = useState(scannerSettings.minSignals);
   const [showOnlyOversold, setShowOnlyOversold] = useState(false);
   const [viewMode, setViewMode] = useState<'combined' | 'shortTerm' | 'longTerm'>('combined');
 
   // API key settings
   const [finnhubApiKey, setFinnhubApiKey] = useState('');
   const [showApiSettings, setShowApiSettings] = useState(false);
+
+  // Sync settings to store when they change
+  useEffect(() => {
+    updateScannerSettings({
+      rsiPeriod: period,
+      oversoldThreshold: oversold,
+      minWinRate,
+      minSignals,
+      dataSource,
+    });
+  }, [period, oversold, minWinRate, minSignals, dataSource, updateScannerSettings]);
 
   // Load API key from localStorage on mount
   useEffect(() => {
@@ -320,8 +335,9 @@ export default function ScannerPage() {
     setError(null);
 
     try {
+      // Parse symbols - accept comma, space, newline, or tab separated
       const symbols = customSymbols.trim()
-        ? customSymbols.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+        ? customSymbols.split(/[\s,;]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
         : DEFAULT_ETFS;
 
       const params = new URLSearchParams({
@@ -541,7 +557,7 @@ export default function ScannerPage() {
               type="text"
               value={customSymbols}
               onChange={(e) => setCustomSymbols(e.target.value.toUpperCase())}
-              placeholder="TQQQ, SOXL, UPRO..."
+              placeholder="TQQQ SOXL UPRO (space, comma, or newline separated)"
               className="input w-full"
             />
             <p className="text-xs text-gray-500 mt-1">

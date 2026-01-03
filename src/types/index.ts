@@ -177,6 +177,15 @@ export interface ReturnDistribution {
   count: number;
 }
 
+// Scanner settings
+export interface ScannerSettings {
+  rsiPeriod: number;
+  oversoldThreshold: number;
+  minWinRate: number;
+  minSignals: number;
+  dataSource: 'yahoo' | 'finnhub';
+}
+
 // App state types
 export interface AppSettings {
   theme: 'dark' | 'light';
@@ -184,6 +193,7 @@ export interface AppSettings {
   rsiConfig: RSIConfig;
   alertSettings: AlertSettings;
   refreshInterval: number; // in milliseconds
+  scannerSettings: ScannerSettings;
 }
 
 // API response types

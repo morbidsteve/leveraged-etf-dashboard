@@ -12,6 +12,7 @@ import {
   AlertSettings,
   ChartTimeframe,
   AppSettings,
+  ScannerSettings,
 } from '@/types';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 import { calculateAvgCost, calculateTotalShares, calculateRealizedPnL, generateId } from '@/lib/calculations';
@@ -283,6 +284,15 @@ export const useAlertStore = create<AlertState>()(
   )
 );
 
+// Default scanner settings
+export const DEFAULT_SCANNER_SETTINGS: ScannerSettings = {
+  rsiPeriod: 250,
+  oversoldThreshold: 50,
+  minWinRate: 0,
+  minSignals: 1,
+  dataSource: 'yahoo',
+};
+
 // App Settings Store
 interface SettingsState {
   settings: AppSettings;
@@ -290,6 +300,7 @@ interface SettingsState {
   setHasHydrated: (state: boolean) => void;
   updateSettings: (updates: Partial<AppSettings>) => void;
   updateRSIConfig: (config: Partial<RSIConfig>) => void;
+  updateScannerSettings: (config: Partial<ScannerSettings>) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -315,6 +326,7 @@ export const useSettingsStore = create<SettingsState>()(
           enabled: true,
         },
         refreshInterval: 5000, // 5 seconds
+        scannerSettings: DEFAULT_SCANNER_SETTINGS,
       },
       _hasHydrated: false,
 
@@ -330,6 +342,14 @@ export const useSettingsStore = create<SettingsState>()(
           settings: {
             ...state.settings,
             rsiConfig: { ...state.settings.rsiConfig, ...config },
+          },
+        })),
+
+      updateScannerSettings: (config) =>
+        set((state) => ({
+          settings: {
+            ...state.settings,
+            scannerSettings: { ...state.settings.scannerSettings, ...config },
           },
         })),
     }),

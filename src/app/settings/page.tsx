@@ -1,11 +1,12 @@
 'use client';
 
 import { MainLayout } from '@/components/Layout';
-import { useSettingsStore, useTradeStore } from '@/store';
+import { useSettingsStore, useTradeStore, DEFAULT_SCANNER_SETTINGS } from '@/store';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 
 export default function SettingsPage() {
-  const { settings, updateSettings, updateRSIConfig } = useSettingsStore();
+  const { settings, updateSettings, updateRSIConfig, updateScannerSettings } = useSettingsStore();
+  const scannerSettings = settings.scannerSettings || DEFAULT_SCANNER_SETTINGS;
   const trades = useTradeStore((state) => state.trades);
 
   const handleExportTrades = () => {
@@ -81,7 +82,7 @@ export default function SettingsPage() {
         {/* RSI Settings */}
         <div className="card">
           <div className="card-header">
-            <h2 className="font-medium text-white">RSI Configuration</h2>
+            <h2 className="font-medium text-white">RSI Configuration (Dashboard/Chart)</h2>
           </div>
           <div className="card-body space-y-4">
             <div>
@@ -132,6 +133,98 @@ export default function SettingsPage() {
             <div className="pt-2">
               <button
                 onClick={() => updateRSIConfig(DEFAULT_RSI_CONFIG)}
+                className="btn btn-ghost text-sm"
+              >
+                Reset to Defaults
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Scanner Settings */}
+        <div className="card">
+          <div className="card-header">
+            <h2 className="font-medium text-white">ETF Scanner Defaults</h2>
+          </div>
+          <div className="card-body space-y-4">
+            <div>
+              <label className="label">RSI Period</label>
+              <input
+                type="number"
+                value={scannerSettings.rsiPeriod}
+                onChange={(e) => updateScannerSettings({ rsiPeriod: Number(e.target.value) })}
+                className="input w-40"
+                min="1"
+                max="500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                RSI period for scanner analysis (default: {DEFAULT_SCANNER_SETTINGS.rsiPeriod})
+              </p>
+            </div>
+
+            <div>
+              <label className="label">Oversold Threshold</label>
+              <input
+                type="number"
+                value={scannerSettings.oversoldThreshold}
+                onChange={(e) => updateScannerSettings({ oversoldThreshold: Number(e.target.value) })}
+                className="input w-40"
+                min="1"
+                max="100"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                RSI below this triggers a signal (default: {DEFAULT_SCANNER_SETTINGS.oversoldThreshold})
+              </p>
+            </div>
+
+            <div>
+              <label className="label">Minimum Win Rate %</label>
+              <input
+                type="number"
+                value={scannerSettings.minWinRate}
+                onChange={(e) => updateScannerSettings({ minWinRate: Number(e.target.value) })}
+                className="input w-40"
+                min="0"
+                max="100"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Filter results below this win rate (default: {DEFAULT_SCANNER_SETTINGS.minWinRate}%)
+              </p>
+            </div>
+
+            <div>
+              <label className="label">Minimum Signals</label>
+              <input
+                type="number"
+                value={scannerSettings.minSignals}
+                onChange={(e) => updateScannerSettings({ minSignals: Number(e.target.value) })}
+                className="input w-40"
+                min="1"
+                max="100"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Require at least this many signals (default: {DEFAULT_SCANNER_SETTINGS.minSignals})
+              </p>
+            </div>
+
+            <div>
+              <label className="label">Data Source</label>
+              <select
+                value={scannerSettings.dataSource}
+                onChange={(e) => updateScannerSettings({ dataSource: e.target.value as 'yahoo' | 'finnhub' })}
+                className="input w-40"
+              >
+                <option value="yahoo">Yahoo Finance</option>
+                <option value="finnhub">Finnhub</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Data provider for scanner
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={() => updateScannerSettings(DEFAULT_SCANNER_SETTINGS)}
                 className="btn btn-ghost text-sm"
               >
                 Reset to Defaults
