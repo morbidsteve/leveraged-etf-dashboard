@@ -48,6 +48,7 @@ export default function CandlestickChart({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const oversoldLineRef = useRef<ISeriesApi<any> | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [chartReady, setChartReady] = useState(false);
 
   const mainChartHeight = showRSI ? Math.floor(height * 0.7) : height;
   const rsiChartHeight = showRSI ? Math.floor(height * 0.3) : 0;
@@ -238,6 +239,9 @@ export default function CandlestickChart({
       });
     }
 
+    // Mark chart as ready
+    setChartReady(true);
+
     return () => {
       chart.remove();
       rsiChartRef.current?.remove();
@@ -248,6 +252,7 @@ export default function CandlestickChart({
       rsiSeriesRef.current = null;
       overboughtLineRef.current = null;
       oversoldLineRef.current = null;
+      setChartReady(false);
     };
   }, [containerWidth, mainChartHeight, rsiChartHeight, showRSI, showVolume, onCrosshairMove]);
 
@@ -263,9 +268,10 @@ export default function CandlestickChart({
     }
   }, [containerWidth]);
 
-  // Update data when candles change
+  // Update data when candles change OR when chart becomes ready
   useEffect(() => {
-    if (!candlestickSeriesRef.current || candles.length === 0) return;
+    // Wait for both chart and data to be ready
+    if (!chartReady || !candlestickSeriesRef.current || candles.length === 0) return;
 
     const candleData: CandlestickData[] = candles.map((candle) => ({
       time: candle.time as Time,
@@ -322,7 +328,7 @@ export default function CandlestickChart({
 
     // Fit content
     chartRef.current?.timeScale().fitContent();
-  }, [candles, rsiConfig, showRSI, showVolume]);
+  }, [candles, rsiConfig, showRSI, showVolume, chartReady]); // chartReady triggers re-run when chart is created
 
   return (
     <div className="w-full">
