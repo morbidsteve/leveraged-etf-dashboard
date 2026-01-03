@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { MainLayout } from '@/components/Layout';
 import { formatCurrency, formatPercent } from '@/lib/calculations';
-import { useSettingsStore } from '@/store';
 
 interface ScanResult {
   symbol: string;
@@ -15,11 +14,12 @@ interface ScanResult {
   winsAt2Pct: number;
   winRateAt1_5Pct: number;
   winRateAt2Pct: number;
-  avgDaysTo1_5Pct: number;
+  avgBarsTo1_5Pct: number;
   avgMaxGain: number;
   avgMaxDrawdown: number;
   signalStrength: number;
   isCurrentlyOversold: boolean;
+  dataPoints: number;
   error?: string;
 }
 
@@ -31,6 +31,7 @@ interface ScanResponse {
   };
   results: ScanResult[];
   timestamp: string;
+  note: string;
 }
 
 // Default leveraged ETFs to scan
@@ -40,19 +41,29 @@ const DEFAULT_ETFS = [
   'QLD', 'SSO', 'UWM', 'DDM', 'MVV', 'SAA', 'UYG', 'ROM', 'USD', 'UGE',
 ];
 
-export default function ScannerPage() {
-  const settings = useSettingsStore((state) => state.settings);
+// Convert 5-minute bars to approximate hours
+function barsToTime(bars: number): string {
+  const minutes = bars * 5;
+  if (minutes < 60) return `${minutes}m`;
+  const hours = minutes / 60;
+  if (hours < 24) return `${hours.toFixed(1)}h`;
+  const days = hours / 6.5; // ~6.5 trading hours per day
+  return `${days.toFixed(1)}d`;
+}
 
+export default function ScannerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<ScanResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastScan, setLastScan] = useState<string | null>(null);
+  const [scanNote, setScanNote] = useState<string>('');
 
-  // Scanner settings
-  const [period, setPeriod] = useState(settings.rsiConfig.period);
-  const [oversold, setOversold] = useState(settings.rsiConfig.oversold);
+  // Scanner settings - defaults for intraday analysis
+  const [period, setPeriod] = useState(14); // Standard 14-period RSI
+  const [oversold, setOversold] = useState(50); // User's preferred threshold
   const [customSymbols, setCustomSymbols] = useState('');
   const [minWinRate, setMinWinRate] = useState(60);
+  const [minSignals, setMinSignals] = useState(3);
   const [showOnlyOversold, setShowOnlyOversold] = useState(false);
 
   const runScan = useCallback(async () => {
@@ -79,6 +90,7 @@ export default function ScannerPage() {
       const data: ScanResponse = await response.json();
       setResults(data.results);
       setLastScan(data.timestamp);
+      setScanNote(data.note || '');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -86,10 +98,27 @@ export default function ScannerPage() {
     }
   }, [customSymbols, period, oversold]);
 
+  // Handle Enter key to run scan
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !isLoading) {
+        // Don't trigger if user is in a textarea
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'TEXTAREA') {
+          runScan();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [runScan, isLoading]);
+
   // Filter results
   const filteredResults = results.filter(r => {
     if (r.error) return false;
     if (r.winRateAt1_5Pct < minWinRate) return false;
+    if (r.totalSignals < minSignals) return false;
     if (showOnlyOversold && !r.isCurrentlyOversold) return false;
     return true;
   });
@@ -99,7 +128,7 @@ export default function ScannerPage() {
     !r.error &&
     r.isCurrentlyOversold &&
     r.winRateAt1_5Pct >= 60 &&
-    r.totalSignals >= 5
+    r.totalSignals >= 3
   );
 
   return (
@@ -108,7 +137,7 @@ export default function ScannerPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">ETF Scanner</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Find ETFs with high RSI-based reversal probability
+            Find ETFs with high RSI-based reversal probability (5-min intraday data)
           </p>
         </div>
         <button
@@ -136,7 +165,7 @@ export default function ScannerPage() {
           <h2 className="font-medium text-white">Scanner Settings</h2>
         </div>
         <div className="card-body">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
             <div>
               <label className="label">RSI Period</label>
               <input
@@ -144,9 +173,10 @@ export default function ScannerPage() {
                 value={period}
                 onChange={(e) => setPeriod(Number(e.target.value))}
                 className="input w-full"
-                min={1}
-                max={500}
+                min={2}
+                max={100}
               />
+              <p className="text-xs text-gray-500 mt-1">Standard: 14</p>
             </div>
             <div>
               <label className="label">Oversold Threshold</label>
@@ -158,6 +188,7 @@ export default function ScannerPage() {
                 min={1}
                 max={100}
               />
+              <p className="text-xs text-gray-500 mt-1">Standard: 30</p>
             </div>
             <div>
               <label className="label">Min Win Rate %</label>
@@ -170,6 +201,18 @@ export default function ScannerPage() {
                 max={100}
               />
             </div>
+            <div>
+              <label className="label">Min Signals</label>
+              <input
+                type="number"
+                value={minSignals}
+                onChange={(e) => setMinSignals(Number(e.target.value))}
+                className="input w-full"
+                min={1}
+                max={50}
+              />
+              <p className="text-xs text-gray-500 mt-1">For reliability</p>
+            </div>
             <div className="flex items-end">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -178,7 +221,7 @@ export default function ScannerPage() {
                   onChange={(e) => setShowOnlyOversold(e.target.checked)}
                   className="w-4 h-4 rounded border-dark-border bg-dark-bg text-profit focus:ring-profit"
                 />
-                <span className="text-sm text-gray-400">Only show currently oversold</span>
+                <span className="text-sm text-gray-400">Only oversold now</span>
               </label>
             </div>
           </div>
@@ -238,8 +281,8 @@ export default function ScannerPage() {
                       <span className="ml-1 font-mono text-profit">{result.winRateAt1_5Pct.toFixed(0)}%</span>
                     </div>
                     <div>
-                      <span className="text-gray-500">Avg Days:</span>
-                      <span className="ml-1 font-mono">{result.avgDaysTo1_5Pct.toFixed(1)}</span>
+                      <span className="text-gray-500">Avg Time:</span>
+                      <span className="ml-1 font-mono">{barsToTime(result.avgBarsTo1_5Pct)}</span>
                     </div>
                     <div>
                       <span className="text-gray-500">Signals:</span>
@@ -257,9 +300,14 @@ export default function ScannerPage() {
       {results.length > 0 && (
         <div className="card">
           <div className="card-header flex items-center justify-between">
-            <h2 className="font-medium text-white">
-              Scan Results ({filteredResults.length} of {results.filter(r => !r.error).length} ETFs)
-            </h2>
+            <div>
+              <h2 className="font-medium text-white">
+                Scan Results ({filteredResults.length} of {results.filter(r => !r.error).length} ETFs)
+              </h2>
+              {scanNote && (
+                <p className="text-xs text-gray-500 mt-1">{scanNote}</p>
+              )}
+            </div>
             {lastScan && (
               <span className="text-xs text-gray-500">
                 Last scan: {new Date(lastScan).toLocaleTimeString()}
@@ -276,7 +324,7 @@ export default function ScannerPage() {
                   <th>Signals</th>
                   <th>Win Rate (1.5%)</th>
                   <th>Win Rate (2%)</th>
-                  <th>Avg Days</th>
+                  <th>Avg Time</th>
                   <th>Avg Max Gain</th>
                   <th>Avg Max DD</th>
                   <th>Score</th>
@@ -286,7 +334,7 @@ export default function ScannerPage() {
                 {filteredResults.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="text-center py-8 text-gray-500">
-                      No results match your filters
+                      No results match your filters. Try lowering Min Win Rate or Min Signals.
                     </td>
                   </tr>
                 ) : (
@@ -301,7 +349,7 @@ export default function ScannerPage() {
                         </div>
                       </td>
                       <td className="font-mono">{formatCurrency(result.currentPrice)}</td>
-                      <td className={`font-mono ${result.currentRSI < oversold ? 'text-profit' : result.currentRSI > 55 ? 'text-loss' : 'text-neutral'}`}>
+                      <td className={`font-mono ${result.currentRSI < oversold ? 'text-profit' : result.currentRSI > 70 ? 'text-loss' : 'text-neutral'}`}>
                         {result.currentRSI.toFixed(1)}
                       </td>
                       <td className="font-mono">{result.totalSignals}</td>
@@ -311,7 +359,7 @@ export default function ScannerPage() {
                       <td className={`font-mono ${result.winRateAt2Pct >= 60 ? 'text-profit' : result.winRateAt2Pct >= 40 ? 'text-neutral' : 'text-loss'}`}>
                         {result.winRateAt2Pct.toFixed(1)}%
                       </td>
-                      <td className="font-mono">{result.avgDaysTo1_5Pct.toFixed(1)}</td>
+                      <td className="font-mono">{barsToTime(result.avgBarsTo1_5Pct)}</td>
                       <td className="font-mono text-profit">{formatPercent(result.avgMaxGain)}</td>
                       <td className="font-mono text-loss">{formatPercent(result.avgMaxDrawdown)}</td>
                       <td>
@@ -331,6 +379,18 @@ export default function ScannerPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Show errors at bottom */}
+          {results.some(r => r.error) && (
+            <div className="p-4 border-t border-dark-border">
+              <p className="text-xs text-gray-500 mb-2">ETFs with insufficient data:</p>
+              <div className="flex flex-wrap gap-2">
+                {results.filter(r => r.error).map(r => (
+                  <span key={r.symbol} className="text-xs text-gray-600">{r.symbol}</span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -343,15 +403,16 @@ export default function ScannerPage() {
             </svg>
             <h3 className="text-lg font-medium text-white mb-2">Find High-Probability ETFs</h3>
             <p className="text-gray-500 max-w-md mx-auto mb-4">
-              This scanner analyzes 1 year of historical data to find ETFs where RSI oversold signals
-              have a high probability of hitting 1.5%+ within 7 trading days.
+              This scanner analyzes 60 days of 5-minute intraday data to find ETFs where RSI oversold signals
+              have a high probability of hitting 1.5%+ within ~1 week.
             </p>
             <div className="text-left max-w-lg mx-auto text-sm text-gray-400 space-y-2">
               <p><strong className="text-white">How it works:</strong></p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>Scans historical data for RSI crossing below your oversold threshold</li>
-                <li>Tracks if price hit 1.5% or 2% target within 7 days</li>
-                <li>Calculates win rate, average days to target, and risk metrics</li>
+                <li>Fetches 60 days of 5-minute candle data for each ETF</li>
+                <li>Calculates RSI and finds all oversold crossings</li>
+                <li>Tracks if price hit 1.5% or 2% target within ~1 week (~500 bars)</li>
+                <li>Calculates win rate, average time to target, and risk metrics</li>
                 <li>Ranks ETFs by a composite signal strength score</li>
                 <li>Highlights ETFs that are currently oversold</li>
               </ul>

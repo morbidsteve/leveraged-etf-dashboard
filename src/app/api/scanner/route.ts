@@ -10,8 +10,6 @@ const DEFAULT_ETFS = [
   'DPST', 'DFEN', 'RETL', 'MIDU', 'UDOW', 'URTY', 'WEBL', 'HIBL', 'WANT', 'DUSL',
   // 2x Leveraged
   'QLD', 'SSO', 'UWM', 'DDM', 'MVV', 'SAA', 'UYG', 'ROM', 'USD', 'UGE',
-  // Inverse (for reference)
-  // 'SQQQ', 'SPXS', 'SOXS', 'FAZ', 'TZA'
 ];
 
 // Calculate RSI from candles
@@ -82,19 +80,23 @@ interface ScanResult {
   winsAt2Pct: number;
   winRateAt1_5Pct: number;
   winRateAt2Pct: number;
-  avgDaysTo1_5Pct: number;
+  avgBarsTo1_5Pct: number;
   avgMaxGain: number;
   avgMaxDrawdown: number;
   // Signal quality
   signalStrength: number; // 0-100 score
   isCurrentlyOversold: boolean;
+  dataPoints: number;
   error?: string;
 }
 
-async function fetchHistoricalData(symbol: string): Promise<Candle[] | null> {
+// Fetch intraday minute data (up to 60 days from Yahoo)
+async function fetchIntradayData(symbol: string): Promise<Candle[] | null> {
   try {
-    // Fetch 1 year of daily data for backtesting
-    const url = `${YAHOO_BASE_URL}/${symbol}?interval=1d&range=1y`;
+    // Yahoo allows up to 60 days of 1-minute data, or 730 days of 1-hour data
+    // We'll use 5-minute intervals for a good balance of granularity and data range
+    // 5m interval gives us up to 60 days of data
+    const url = `${YAHOO_BASE_URL}/${symbol}?interval=5m&range=60d`;
 
     const response = await fetch(url, {
       headers: {
@@ -103,6 +105,7 @@ async function fetchHistoricalData(symbol: string): Promise<Candle[] | null> {
     });
 
     if (!response.ok) {
+      console.error(`Failed to fetch ${symbol}: ${response.status}`);
       return null;
     }
 
@@ -110,6 +113,7 @@ async function fetchHistoricalData(symbol: string): Promise<Candle[] | null> {
     const result = data?.chart?.result?.[0];
 
     if (!result) {
+      console.error(`No result for ${symbol}`);
       return null;
     }
 
@@ -117,6 +121,7 @@ async function fetchHistoricalData(symbol: string): Promise<Candle[] | null> {
     const quote = result.indicators?.quote?.[0];
 
     if (!quote) {
+      console.error(`No quote data for ${symbol}`);
       return null;
     }
 
@@ -143,7 +148,8 @@ async function fetchHistoricalData(symbol: string): Promise<Candle[] | null> {
     }
 
     return candles;
-  } catch {
+  } catch (err) {
+    console.error(`Error fetching ${symbol}:`, err);
     return null;
   }
 }
@@ -163,18 +169,20 @@ function analyzeETF(
   const currentRSI = rsiValues[rsiValues.length - 1] || 50;
 
   // Calculate average volume
-  const volumes = candles.slice(-20).map(c => c.volume || 0);
+  const volumes = candles.slice(-100).map(c => c.volume || 0);
   const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
 
   // Backtest: Find all RSI oversold signals and track outcomes
   let totalSignals = 0;
   let winsAt1_5Pct = 0;
   let winsAt2Pct = 0;
-  let totalDaysTo1_5Pct = 0;
+  let totalBarsTo1_5Pct = 0;
   let totalMaxGain = 0;
   let totalMaxDrawdown = 0;
 
-  const maxLookforward = 7; // Look forward up to 7 trading days
+  // For 5-minute candles, 1 week = ~5 trading days * 6.5 hours * 12 candles/hour = ~390 candles
+  // But we'll look forward ~500 bars to be safe (about 1 week of trading)
+  const maxLookforward = 500;
 
   for (let i = 0; i < rsiValues.length - maxLookforward; i++) {
     const rsi = rsiValues[i];
@@ -190,11 +198,11 @@ function analyzeETF(
 
       let hit1_5 = false;
       let hit2 = false;
-      let daysTo1_5 = maxLookforward;
+      let barsTo1_5 = maxLookforward;
       let maxGain = 0;
       let maxDrawdown = 0;
 
-      // Look forward to see if target is hit
+      // Look forward to see if target is hit within ~1 week
       for (let j = 1; j <= maxLookforward && i + offset + j < candles.length; j++) {
         const futureCandle = candles[i + offset + j];
         const highPrice = futureCandle.high;
@@ -209,17 +217,20 @@ function analyzeETF(
 
         if (!hit1_5 && highPrice >= target1_5) {
           hit1_5 = true;
-          daysTo1_5 = j;
+          barsTo1_5 = j;
         }
 
         if (!hit2 && highPrice >= target2) {
           hit2 = true;
         }
+
+        // Once we hit both targets, we can stop looking
+        if (hit1_5 && hit2) break;
       }
 
       if (hit1_5) winsAt1_5Pct++;
       if (hit2) winsAt2Pct++;
-      totalDaysTo1_5Pct += daysTo1_5;
+      totalBarsTo1_5Pct += hit1_5 ? barsTo1_5 : 0;
       totalMaxGain += maxGain;
       totalMaxDrawdown += maxDrawdown;
     }
@@ -228,15 +239,16 @@ function analyzeETF(
   // Calculate metrics
   const winRateAt1_5Pct = totalSignals > 0 ? (winsAt1_5Pct / totalSignals) * 100 : 0;
   const winRateAt2Pct = totalSignals > 0 ? (winsAt2Pct / totalSignals) * 100 : 0;
-  const avgDaysTo1_5Pct = totalSignals > 0 ? totalDaysTo1_5Pct / totalSignals : 0;
+  const avgBarsTo1_5Pct = winsAt1_5Pct > 0 ? totalBarsTo1_5Pct / winsAt1_5Pct : 0;
   const avgMaxGain = totalSignals > 0 ? totalMaxGain / totalSignals : 0;
   const avgMaxDrawdown = totalSignals > 0 ? totalMaxDrawdown / totalSignals : 0;
 
   // Calculate signal strength score (0-100)
-  // Based on: win rate, avg gain vs drawdown, number of signals
+  // Based on: win rate, avg gain vs drawdown, number of signals, consistency
   const winRateScore = winRateAt1_5Pct; // 0-100
   const riskRewardScore = avgMaxDrawdown > 0 ? Math.min(100, (avgMaxGain / avgMaxDrawdown) * 50) : 50;
-  const sampleSizeScore = Math.min(100, totalSignals * 5); // Penalize if < 20 signals
+  // Need at least 3 signals to be meaningful, penalize heavily if fewer
+  const sampleSizeScore = totalSignals >= 5 ? 100 : totalSignals >= 3 ? 60 : totalSignals * 15;
 
   const signalStrength = Math.round(
     (winRateScore * 0.5) + (riskRewardScore * 0.3) + (sampleSizeScore * 0.2)
@@ -252,20 +264,23 @@ function analyzeETF(
     winsAt2Pct,
     winRateAt1_5Pct,
     winRateAt2Pct,
-    avgDaysTo1_5Pct,
+    avgBarsTo1_5Pct,
     avgMaxGain,
     avgMaxDrawdown,
     signalStrength,
     isCurrentlyOversold: currentRSI < rsiConfig.oversold,
+    dataPoints: candles.length,
   };
 }
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const symbolsParam = searchParams.get('symbols');
-  const period = parseInt(searchParams.get('period') || '250');
+  // Default to 14-period RSI for intraday (common standard)
+  // But allow override via parameter
+  const period = parseInt(searchParams.get('period') || '14');
   const oversold = parseInt(searchParams.get('oversold') || '50');
-  const overbought = parseInt(searchParams.get('overbought') || '55');
+  const overbought = parseInt(searchParams.get('overbought') || '70');
 
   const symbols = symbolsParam ? symbolsParam.split(',') : DEFAULT_ETFS;
 
@@ -278,15 +293,15 @@ export async function GET(request: NextRequest) {
   const results: ScanResult[] = [];
 
   // Process symbols in parallel with rate limiting
-  const batchSize = 5;
+  const batchSize = 3; // Smaller batches to avoid rate limiting with intraday data
   for (let i = 0; i < symbols.length; i += batchSize) {
     const batch = symbols.slice(i, i + batchSize);
 
     const batchResults = await Promise.all(
       batch.map(async (symbol) => {
-        const candles = await fetchHistoricalData(symbol.toUpperCase());
+        const candles = await fetchIntradayData(symbol.toUpperCase());
 
-        if (!candles || candles.length < period + 10) {
+        if (!candles || candles.length < period + 100) {
           return {
             symbol: symbol.toUpperCase(),
             currentPrice: 0,
@@ -297,12 +312,13 @@ export async function GET(request: NextRequest) {
             winsAt2Pct: 0,
             winRateAt1_5Pct: 0,
             winRateAt2Pct: 0,
-            avgDaysTo1_5Pct: 0,
+            avgBarsTo1_5Pct: 0,
             avgMaxGain: 0,
             avgMaxDrawdown: 0,
             signalStrength: 0,
             isCurrentlyOversold: false,
-            error: 'Insufficient data',
+            dataPoints: candles?.length || 0,
+            error: `Insufficient data (${candles?.length || 0} candles)`,
           } as ScanResult;
         }
 
@@ -312,18 +328,23 @@ export async function GET(request: NextRequest) {
 
     results.push(...batchResults);
 
-    // Small delay between batches to avoid rate limiting
+    // Delay between batches to avoid rate limiting
     if (i + batchSize < symbols.length) {
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
 
-  // Sort by signal strength (best first)
-  results.sort((a, b) => b.signalStrength - a.signalStrength);
+  // Sort by signal strength (best first), putting errors at the end
+  results.sort((a, b) => {
+    if (a.error && !b.error) return 1;
+    if (!a.error && b.error) return -1;
+    return b.signalStrength - a.signalStrength;
+  });
 
   return NextResponse.json({
     rsiConfig,
     results,
     timestamp: new Date().toISOString(),
+    note: 'Using 5-minute candles over 60 days. RSI signals when crossing below threshold, tracking if price gains 1.5%+ within ~1 week.',
   });
 }
