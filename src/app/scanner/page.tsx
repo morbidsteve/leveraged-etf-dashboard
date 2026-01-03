@@ -4,11 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { MainLayout } from '@/components/Layout';
 import { formatCurrency, formatPercent } from '@/lib/calculations';
 
-interface ScanResult {
-  symbol: string;
-  currentPrice: number;
-  currentRSI: number;
-  avgVolume: number;
+interface TimeframeMetrics {
   totalSignals: number;
   winsAt1_5Pct: number;
   winsAt2Pct: number;
@@ -18,16 +14,33 @@ interface ScanResult {
   avgMaxGain: number;
   avgMaxDrawdown: number;
   signalStrength: number;
-  isCurrentlyOversold: boolean;
   dataPoints: number;
+}
+
+interface ScanResult {
+  symbol: string;
+  currentPrice: number;
+  currentRSI: number;
+  avgVolume: number;
+  shortTerm: TimeframeMetrics;
+  longTerm: TimeframeMetrics;
+  combinedScore: number;
+  isCurrentlyOversold: boolean;
   error?: string;
 }
 
 interface Methodology {
-  dataSource: string;
-  dataPoints: string;
+  shortTerm: {
+    dataSource: string;
+    dataPoints: string;
+    targetWindow: string;
+  };
+  longTerm: {
+    dataSource: string;
+    dataPoints: string;
+    targetWindow: string;
+  };
   signalTrigger: string;
-  targetWindow: string;
   targets: string[];
   scoreFormula: string;
 }
@@ -78,6 +91,7 @@ export default function ScannerPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastScan, setLastScan] = useState<string | null>(null);
   const [methodology, setMethodology] = useState<Methodology | null>(null);
+  const [dataSource, setDataSource] = useState<'yahoo' | 'finnhub'>('yahoo');
 
   // Scanner settings - defaults for intraday analysis
   const [period, setPeriod] = useState(14); // Standard 14-period RSI
@@ -86,6 +100,25 @@ export default function ScannerPage() {
   const [minWinRate, setMinWinRate] = useState(60);
   const [minSignals, setMinSignals] = useState(3);
   const [showOnlyOversold, setShowOnlyOversold] = useState(false);
+  const [viewMode, setViewMode] = useState<'combined' | 'shortTerm' | 'longTerm'>('combined');
+
+  // API key settings
+  const [finnhubApiKey, setFinnhubApiKey] = useState('');
+  const [showApiSettings, setShowApiSettings] = useState(false);
+
+  // Load API key from localStorage on mount
+  useEffect(() => {
+    const savedKey = localStorage.getItem('finnhub_api_key');
+    if (savedKey) {
+      setFinnhubApiKey(savedKey);
+    }
+  }, []);
+
+  // Save API key to localStorage
+  const saveApiKey = () => {
+    localStorage.setItem('finnhub_api_key', finnhubApiKey);
+    setShowApiSettings(false);
+  };
 
   const runScan = useCallback(async () => {
     setIsLoading(true);
@@ -100,7 +133,13 @@ export default function ScannerPage() {
         symbols: symbols.join(','),
         period: period.toString(),
         oversold: oversold.toString(),
+        source: dataSource,
       });
+
+      // Add API key if using Finnhub
+      if (dataSource === 'finnhub' && finnhubApiKey) {
+        params.set('apiKey', finnhubApiKey);
+      }
 
       const response = await fetch(`/api/scanner?${params}`);
 
@@ -117,7 +156,7 @@ export default function ScannerPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [customSymbols, period, oversold]);
+  }, [customSymbols, period, oversold, dataSource, finnhubApiKey]);
 
   // Handle Enter key to run scan
   useEffect(() => {
@@ -135,11 +174,26 @@ export default function ScannerPage() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [runScan, isLoading]);
 
+  // Get the relevant metrics based on view mode
+  const getMetrics = (result: ScanResult): TimeframeMetrics => {
+    if (viewMode === 'shortTerm') return result.shortTerm;
+    if (viewMode === 'longTerm') return result.longTerm;
+    // For combined, use short-term metrics but combined score
+    return result.shortTerm;
+  };
+
+  const getScore = (result: ScanResult): number => {
+    if (viewMode === 'shortTerm') return result.shortTerm.signalStrength;
+    if (viewMode === 'longTerm') return result.longTerm.signalStrength;
+    return result.combinedScore;
+  };
+
   // Filter results
   const filteredResults = results.filter(r => {
     if (r.error) return false;
-    if (r.winRateAt1_5Pct < minWinRate) return false;
-    if (r.totalSignals < minSignals) return false;
+    const metrics = getMetrics(r);
+    if (metrics.winRateAt1_5Pct < minWinRate) return false;
+    if (metrics.totalSignals < minSignals) return false;
     if (showOnlyOversold && !r.isCurrentlyOversold) return false;
     return true;
   });
@@ -148,8 +202,8 @@ export default function ScannerPage() {
   const hotOpportunities = results.filter(r =>
     !r.error &&
     r.isCurrentlyOversold &&
-    r.winRateAt1_5Pct >= 60 &&
-    r.totalSignals >= 3
+    r.shortTerm.winRateAt1_5Pct >= 60 &&
+    r.shortTerm.totalSignals >= 2
   );
 
   return (
@@ -190,7 +244,7 @@ export default function ScannerPage() {
             <div>
               <label className="label flex items-center gap-1">
                 RSI Period
-                <Tooltip text="Number of 1-minute candles used to calculate RSI. Standard is 14.">
+                <Tooltip text="Number of candles used to calculate RSI. Standard is 14.">
                   <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -284,6 +338,82 @@ export default function ScannerPage() {
               Default scans {DEFAULT_ETFS.length} leveraged ETFs. Press Enter to scan.
             </p>
           </div>
+
+          {/* Data Source & API Settings */}
+          <div className="mt-4 pt-4 border-t border-dark-border">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <label className="label mb-0">Data Source:</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setDataSource('yahoo')}
+                    className={`px-3 py-1.5 text-sm rounded ${dataSource === 'yahoo' ? 'bg-profit/20 text-profit border border-profit/50' : 'bg-dark-bg text-gray-400 border border-dark-border hover:text-white'}`}
+                  >
+                    Yahoo Finance
+                  </button>
+                  <button
+                    onClick={() => setDataSource('finnhub')}
+                    className={`px-3 py-1.5 text-sm rounded ${dataSource === 'finnhub' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'bg-dark-bg text-gray-400 border border-dark-border hover:text-white'}`}
+                  >
+                    Finnhub
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowApiSettings(!showApiSettings)}
+                className="text-sm text-gray-400 hover:text-white flex items-center gap-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                API Settings
+              </button>
+            </div>
+
+            {dataSource === 'finnhub' && !finnhubApiKey && (
+              <p className="text-sm text-yellow-400 mt-2">
+                Finnhub requires an API key. Click {"\""}API Settings{"\""} to configure.
+              </p>
+            )}
+
+            {showApiSettings && (
+              <div className="mt-4 p-4 bg-dark-bg rounded-lg border border-dark-border">
+                <h3 className="text-sm font-medium text-white mb-3">API Configuration</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="label flex items-center gap-1">
+                      Finnhub API Key
+                      <Tooltip text="Get a free API key at finnhub.io. Required for Finnhub data source.">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </Tooltip>
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={finnhubApiKey}
+                        onChange={(e) => setFinnhubApiKey(e.target.value)}
+                        placeholder="Enter your Finnhub API key"
+                        className="input flex-1"
+                      />
+                      <button onClick={saveApiKey} className="btn btn-primary">
+                        Save
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Get a free key at{' '}
+                      <a href="https://finnhub.io" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+                        finnhub.io
+                      </a>
+                      . Key is stored locally in your browser.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -306,7 +436,7 @@ export default function ScannerPage() {
           </div>
           <div className="card-body">
             <p className="text-sm text-gray-400 mb-4">
-              These ETFs are <strong className="text-white">currently</strong> below RSI {oversold} and have historically gained 1.5%+ within 1 day at least 60% of the time.
+              These ETFs are <strong className="text-white">currently</strong> below RSI {oversold} and have historically gained 1.5%+ within 1 day.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {hotOpportunities.map((result) => (
@@ -326,16 +456,16 @@ export default function ScannerPage() {
                       <span className="ml-1 font-mono">{formatCurrency(result.currentPrice)}</span>
                     </div>
                     <div>
-                      <span className="text-gray-500">Win Rate:</span>
-                      <span className="ml-1 font-mono text-profit">{result.winRateAt1_5Pct.toFixed(0)}%</span>
+                      <span className="text-gray-500">7d Win:</span>
+                      <span className="ml-1 font-mono text-profit">{result.shortTerm.winRateAt1_5Pct.toFixed(0)}%</span>
                     </div>
                     <div>
-                      <span className="text-gray-500">Avg Time:</span>
-                      <span className="ml-1 font-mono">{minsToTime(result.avgMinsTo1_5Pct)}</span>
+                      <span className="text-gray-500">60d Win:</span>
+                      <span className="ml-1 font-mono text-blue-400">{result.longTerm.winRateAt1_5Pct.toFixed(0)}%</span>
                     </div>
                     <div>
-                      <span className="text-gray-500">Signals:</span>
-                      <span className="ml-1 font-mono">{result.totalSignals}</span>
+                      <span className="text-gray-500">Score:</span>
+                      <span className="ml-1 font-mono">{result.combinedScore}</span>
                     </div>
                   </div>
                 </div>
@@ -359,90 +489,49 @@ export default function ScannerPage() {
           <div className="card-body text-sm">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h3 className="font-medium text-white mb-3">The Strategy</h3>
+                <h3 className="font-medium text-white mb-3">Dual Timeframe Analysis</h3>
                 <div className="space-y-3 text-gray-400">
-                  <div className="flex gap-3">
-                    <span className="text-profit font-bold">1.</span>
-                    <div>
-                      <strong className="text-white">Data:</strong> {methodology.dataSource}
-                      <p className="text-xs text-gray-500">{methodology.dataPoints}</p>
-                    </div>
+                  <div className="p-3 bg-profit/10 border border-profit/30 rounded-lg">
+                    <strong className="text-profit">Short-Term (7 days)</strong>
+                    <p className="text-xs mt-1">{methodology.shortTerm.dataSource}</p>
+                    <p className="text-xs text-gray-500">{methodology.shortTerm.dataPoints}</p>
                   </div>
-                  <div className="flex gap-3">
-                    <span className="text-profit font-bold">2.</span>
-                    <div>
-                      <strong className="text-white">Signal:</strong> {methodology.signalTrigger}
-                      <p className="text-xs text-gray-500">Each time RSI drops below {oversold}, we record the entry price</p>
-                    </div>
+                  <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                    <strong className="text-blue-400">Long-Term (60 days)</strong>
+                    <p className="text-xs mt-1">{methodology.longTerm.dataSource}</p>
+                    <p className="text-xs text-gray-500">{methodology.longTerm.dataPoints}</p>
                   </div>
-                  <div className="flex gap-3">
-                    <span className="text-profit font-bold">3.</span>
-                    <div>
-                      <strong className="text-white">Target:</strong> Price gains 1.5% or 2% from entry
-                      <p className="text-xs text-gray-500">Window: {methodology.targetWindow}</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <span className="text-profit font-bold">4.</span>
-                    <div>
-                      <strong className="text-white">Win Rate:</strong> % of signals that hit target
-                      <p className="text-xs text-gray-500">Higher = more reliable pattern</p>
-                    </div>
-                  </div>
+                  <p className="text-xs">
+                    <strong className="text-white">Combined Score:</strong> {methodology.scoreFormula}
+                  </p>
                 </div>
               </div>
               <div>
-                <h3 className="font-medium text-white mb-3">Column Explanations</h3>
+                <h3 className="font-medium text-white mb-3">The Strategy</h3>
                 <div className="space-y-2 text-gray-400">
-                  <p>
-                    <Tooltip text="How many times RSI crossed below the threshold in the past month. More signals = more data points to validate the pattern.">
-                      <span className="text-white font-medium underline decoration-dotted cursor-help">Signals:</span>
-                    </Tooltip>
-                    {' '}Times RSI crossed below {oversold} in past 30 days
-                  </p>
-                  <p>
-                    <Tooltip text="Of all the signals, what percentage hit +1.5% within 1 trading day? 60%+ is considered good.">
-                      <span className="text-white font-medium underline decoration-dotted cursor-help">Win Rate (1.5%):</span>
-                    </Tooltip>
-                    {' '}% that gained 1.5%+ within 1 day
-                  </p>
-                  <p>
-                    <Tooltip text="Of all the signals, what percentage hit +2% within 1 trading day?">
-                      <span className="text-white font-medium underline decoration-dotted cursor-help">Win Rate (2%):</span>
-                    </Tooltip>
-                    {' '}% that gained 2%+ within 1 day
-                  </p>
-                  <p>
-                    <Tooltip text="When the target was hit, how long did it take on average?">
-                      <span className="text-white font-medium underline decoration-dotted cursor-help">Avg Time:</span>
-                    </Tooltip>
-                    {' '}Average time to reach 1.5% target
-                  </p>
-                  <p>
-                    <Tooltip text="Average highest gain reached per signal (even if target wasn't hit).">
-                      <span className="text-white font-medium underline decoration-dotted cursor-help">Avg Max Gain:</span>
-                    </Tooltip>
-                    {' '}Average peak gain per signal
-                  </p>
-                  <p>
-                    <Tooltip text="Average worst drawdown before hitting target. Lower = less risk.">
-                      <span className="text-white font-medium underline decoration-dotted cursor-help">Avg Max DD:</span>
-                    </Tooltip>
-                    {' '}Average max drawdown before target
-                  </p>
-                  <p>
-                    <Tooltip text={`Composite score: ${methodology.scoreFormula}. Higher = better opportunity.`}>
-                      <span className="text-white font-medium underline decoration-dotted cursor-help">Score:</span>
-                    </Tooltip>
-                    {' '}Overall quality rating (0-100)
-                  </p>
+                  <div className="flex gap-2">
+                    <span className="text-profit font-bold">1.</span>
+                    <span><strong className="text-white">Signal:</strong> {methodology.signalTrigger}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-profit font-bold">2.</span>
+                    <span><strong className="text-white">Target:</strong> Price gains 1.5% or 2% from entry</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-profit font-bold">3.</span>
+                    <span><strong className="text-white">Window:</strong> 1 trading day (390 minutes)</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-profit font-bold">4.</span>
+                    <span><strong className="text-white">Win Rate:</strong> % of signals that hit target</span>
+                  </div>
                 </div>
               </div>
             </div>
             <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
               <p className="text-yellow-400 text-sm">
-                <strong>Key Insight:</strong> Look for ETFs with high win rates ({'>'}60%), multiple signals ({'>'}3), and good risk/reward (Max Gain {'>'} Max DD).
-                The {'"'}OVERSOLD{'"'} badge means the ETF is <em>currently</em> below RSI {oversold} — a potential entry point.
+                <strong>Key Insight:</strong> Short-term (7d) shows recent behavior, long-term (60d) confirms pattern consistency.
+                Both high = strong signal. Look for ETFs with {'>'}60% win rate in both timeframes.
               </p>
             </div>
           </div>
@@ -458,11 +547,34 @@ export default function ScannerPage() {
                 Scan Results ({filteredResults.length} of {results.filter(r => !r.error).length} ETFs pass filters)
               </h2>
             </div>
-            {lastScan && (
-              <span className="text-xs text-gray-500">
-                Last scan: {new Date(lastScan).toLocaleTimeString()}
-              </span>
-            )}
+            <div className="flex items-center gap-4">
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 bg-dark-bg rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('combined')}
+                  className={`px-3 py-1 text-xs rounded ${viewMode === 'combined' ? 'bg-dark-card text-white' : 'text-gray-400 hover:text-white'}`}
+                >
+                  Combined
+                </button>
+                <button
+                  onClick={() => setViewMode('shortTerm')}
+                  className={`px-3 py-1 text-xs rounded ${viewMode === 'shortTerm' ? 'bg-profit/20 text-profit' : 'text-gray-400 hover:text-white'}`}
+                >
+                  7 Days
+                </button>
+                <button
+                  onClick={() => setViewMode('longTerm')}
+                  className={`px-3 py-1 text-xs rounded ${viewMode === 'longTerm' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400 hover:text-white'}`}
+                >
+                  60 Days
+                </button>
+              </div>
+              {lastScan && (
+                <span className="text-xs text-gray-500">
+                  Last scan: {new Date(lastScan).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="table">
@@ -476,18 +588,18 @@ export default function ScannerPage() {
                     </Tooltip>
                   </th>
                   <th>
-                    <Tooltip text="Number of times RSI crossed below threshold in past 30 days.">
+                    <Tooltip text="Number of times RSI crossed below threshold.">
                       <span className="underline decoration-dotted cursor-help">Signals</span>
                     </Tooltip>
                   </th>
                   <th>
                     <Tooltip text="% of signals where price hit +1.5% within 1 trading day.">
-                      <span className="underline decoration-dotted cursor-help">Win Rate (1.5%)</span>
+                      <span className="underline decoration-dotted cursor-help">Win (1.5%)</span>
                     </Tooltip>
                   </th>
                   <th>
                     <Tooltip text="% of signals where price hit +2% within 1 trading day.">
-                      <span className="underline decoration-dotted cursor-help">Win Rate (2%)</span>
+                      <span className="underline decoration-dotted cursor-help">Win (2%)</span>
                     </Tooltip>
                   </th>
                   <th>
@@ -497,16 +609,16 @@ export default function ScannerPage() {
                   </th>
                   <th>
                     <Tooltip text="Average highest gain reached per signal.">
-                      <span className="underline decoration-dotted cursor-help">Avg Max Gain</span>
+                      <span className="underline decoration-dotted cursor-help">Max Gain</span>
                     </Tooltip>
                   </th>
                   <th>
                     <Tooltip text="Average max drawdown before hitting target.">
-                      <span className="underline decoration-dotted cursor-help">Avg Max DD</span>
+                      <span className="underline decoration-dotted cursor-help">Max DD</span>
                     </Tooltip>
                   </th>
                   <th>
-                    <Tooltip text="Composite score: 50% win rate + 30% risk/reward + 20% sample size.">
+                    <Tooltip text={viewMode === 'combined' ? 'Combined: 60% short-term + 40% long-term score' : 'Score for this timeframe'}>
                       <span className="underline decoration-dotted cursor-help">Score</span>
                     </Tooltip>
                   </th>
@@ -520,43 +632,65 @@ export default function ScannerPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredResults.map((result) => (
-                    <tr key={result.symbol} className={result.isCurrentlyOversold ? 'bg-profit/5' : ''}>
-                      <td className="font-medium text-white">
-                        <div className="flex items-center gap-2">
-                          {result.symbol}
-                          {result.isCurrentlyOversold && (
-                            <span className="badge badge-success text-xs">OVERSOLD</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="font-mono">{formatCurrency(result.currentPrice)}</td>
-                      <td className={`font-mono ${result.currentRSI < oversold ? 'text-profit' : result.currentRSI > 70 ? 'text-loss' : 'text-neutral'}`}>
-                        {result.currentRSI.toFixed(1)}
-                      </td>
-                      <td className="font-mono">{result.totalSignals}</td>
-                      <td className={`font-mono ${result.winRateAt1_5Pct >= 70 ? 'text-profit' : result.winRateAt1_5Pct >= 50 ? 'text-neutral' : 'text-loss'}`}>
-                        {result.winRateAt1_5Pct.toFixed(1)}%
-                      </td>
-                      <td className={`font-mono ${result.winRateAt2Pct >= 60 ? 'text-profit' : result.winRateAt2Pct >= 40 ? 'text-neutral' : 'text-loss'}`}>
-                        {result.winRateAt2Pct.toFixed(1)}%
-                      </td>
-                      <td className="font-mono">{minsToTime(result.avgMinsTo1_5Pct)}</td>
-                      <td className="font-mono text-profit">{formatPercent(result.avgMaxGain)}</td>
-                      <td className="font-mono text-loss">{formatPercent(result.avgMaxDrawdown)}</td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-2 bg-dark-border rounded overflow-hidden">
-                            <div
-                              className={`h-full rounded ${result.signalStrength >= 70 ? 'bg-profit' : result.signalStrength >= 50 ? 'bg-neutral' : 'bg-loss'}`}
-                              style={{ width: `${result.signalStrength}%` }}
-                            />
+                  filteredResults.map((result) => {
+                    const metrics = getMetrics(result);
+                    const score = getScore(result);
+                    return (
+                      <tr key={result.symbol} className={result.isCurrentlyOversold ? 'bg-profit/5' : ''}>
+                        <td className="font-medium text-white">
+                          <div className="flex items-center gap-2">
+                            {result.symbol}
+                            {result.isCurrentlyOversold && (
+                              <span className="badge badge-success text-xs">OVERSOLD</span>
+                            )}
                           </div>
-                          <span className="font-mono text-xs">{result.signalStrength}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="font-mono">{formatCurrency(result.currentPrice)}</td>
+                        <td className={`font-mono ${result.currentRSI < oversold ? 'text-profit' : result.currentRSI > 70 ? 'text-loss' : 'text-neutral'}`}>
+                          {result.currentRSI.toFixed(1)}
+                        </td>
+                        <td className="font-mono">
+                          {viewMode === 'combined' ? (
+                            <span className="flex gap-1">
+                              <span className="text-profit">{result.shortTerm.totalSignals}</span>
+                              <span className="text-gray-500">/</span>
+                              <span className="text-blue-400">{result.longTerm.totalSignals}</span>
+                            </span>
+                          ) : (
+                            metrics.totalSignals
+                          )}
+                        </td>
+                        <td className={`font-mono ${metrics.winRateAt1_5Pct >= 70 ? 'text-profit' : metrics.winRateAt1_5Pct >= 50 ? 'text-neutral' : 'text-loss'}`}>
+                          {viewMode === 'combined' ? (
+                            <span className="flex gap-1">
+                              <span className="text-profit">{result.shortTerm.winRateAt1_5Pct.toFixed(0)}%</span>
+                              <span className="text-gray-500">/</span>
+                              <span className="text-blue-400">{result.longTerm.winRateAt1_5Pct.toFixed(0)}%</span>
+                            </span>
+                          ) : (
+                            `${metrics.winRateAt1_5Pct.toFixed(1)}%`
+                          )}
+                        </td>
+                        <td className={`font-mono ${metrics.winRateAt2Pct >= 60 ? 'text-profit' : metrics.winRateAt2Pct >= 40 ? 'text-neutral' : 'text-loss'}`}>
+                          {metrics.winRateAt2Pct.toFixed(1)}%
+                        </td>
+                        <td className="font-mono">{minsToTime(metrics.avgMinsTo1_5Pct)}</td>
+                        <td className="font-mono text-profit">{formatPercent(metrics.avgMaxGain)}</td>
+                        <td className="font-mono text-loss">{formatPercent(metrics.avgMaxDrawdown)}</td>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-2 bg-dark-border rounded overflow-hidden">
+                              <div
+                                className={`h-full rounded ${score >= 70 ? 'bg-profit' : score >= 50 ? 'bg-neutral' : 'bg-loss'}`}
+                                style={{ width: `${score}%` }}
+                              />
+                            </div>
+                            <span className="font-mono text-xs">{score}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -585,14 +719,14 @@ export default function ScannerPage() {
             </svg>
             <h3 className="text-lg font-medium text-white mb-2">Find Repeatable RSI Reversal Patterns</h3>
             <p className="text-gray-500 max-w-md mx-auto mb-4">
-              This scanner backtests 30 days of 1-minute data to find ETFs where RSI dropping below {oversold}
-              has historically led to 1.5%+ gains within 1 trading day.
+              This scanner analyzes both short-term (7 days, 1-min bars) and long-term (60 days, 5-min bars) data
+              to find ETFs where RSI dropping below {oversold} consistently leads to 1.5%+ gains within 1 day.
             </p>
             <div className="text-left max-w-lg mx-auto text-sm text-gray-400 space-y-2">
               <p><strong className="text-white">What you{"'"}re looking for:</strong></p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li><strong className="text-profit">High Win Rate</strong> - At least 60% of signals hit the 1.5% target</li>
-                <li><strong className="text-profit">Multiple Signals</strong> - 3+ occurrences means the pattern is repeatable</li>
+                <li><strong className="text-profit">High Win Rate in Both Timeframes</strong> - Confirms pattern reliability</li>
+                <li><strong className="text-profit">Multiple Signals</strong> - More data points = more confidence</li>
                 <li><strong className="text-profit">Good Risk/Reward</strong> - Avg Max Gain should exceed Avg Max Drawdown</li>
                 <li><strong className="text-profit">Currently Oversold</strong> - Look for the OVERSOLD badge for potential entries</li>
               </ul>
