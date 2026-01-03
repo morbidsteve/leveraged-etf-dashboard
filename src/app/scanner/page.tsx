@@ -764,6 +764,75 @@ export default function ScannerPage() {
         </div>
       )}
 
+      {/* Metrics Guide */}
+      {results.length > 0 && (
+        <div className="card mb-6">
+          <div className="card-header">
+            <h2 className="font-medium text-white flex items-center gap-2">
+              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Understanding the Metrics
+            </h2>
+          </div>
+          <div className="card-body">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+              <div className="p-3 bg-dark-bg rounded-lg">
+                <h4 className="font-medium text-white mb-1">Signals</h4>
+                <p className="text-gray-400">
+                  Number of times RSI dropped below {oversold}. Each signal is a potential entry point, spaced at least 1 day apart to avoid overlap.
+                </p>
+              </div>
+
+              <div className="p-3 bg-dark-bg rounded-lg">
+                <h4 className="font-medium text-white mb-1">Win Rate @ 1.5% / 2%</h4>
+                <p className="text-gray-400">
+                  Percentage of signals where price hit +1.5% or +2% within 1 trading day. Higher = more reliable pattern.
+                </p>
+              </div>
+
+              <div className="p-3 bg-dark-bg rounded-lg">
+                <h4 className="font-medium text-white mb-1">Avg Time to Target</h4>
+                <p className="text-gray-400">
+                  When successful, how long it typically takes to reach +1.5%. Faster = better for quick trades.
+                </p>
+              </div>
+
+              <div className="p-3 bg-dark-bg rounded-lg">
+                <h4 className="font-medium text-profit mb-1">Avg Max Gain</h4>
+                <p className="text-gray-400">
+                  The highest % gain reached on average per signal. Shows upside potential even if some trades fail.
+                </p>
+              </div>
+
+              <div className="p-3 bg-dark-bg rounded-lg">
+                <h4 className="font-medium text-loss mb-1">Avg Max Drawdown</h4>
+                <p className="text-gray-400">
+                  The worst % drop on average before recovering. Shows your risk exposure. Ideally less than Avg Max Gain.
+                </p>
+              </div>
+
+              <div className="p-3 bg-dark-bg rounded-lg">
+                <h4 className="font-medium text-white mb-1">Score (0-100)</h4>
+                <p className="text-gray-400">
+                  Combined metric: 50% win rate + 30% risk/reward ratio + 20% sample size. Higher = better opportunity.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 p-3 bg-profit/10 border border-profit/30 rounded-lg">
+              <h4 className="font-medium text-profit mb-2">What Makes a Good Signal?</h4>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• <strong className="text-white">Win Rate {'>'}60%</strong> in both short-term AND long-term</li>
+                <li>• <strong className="text-white">Avg Max Gain {'>'} Avg Max Drawdown</strong> (positive risk/reward)</li>
+                <li>• <strong className="text-white">5+ signals</strong> for statistical significance</li>
+                <li>• <strong className="text-white">Currently OVERSOLD</strong> for immediate entry opportunity</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Results Table */}
       {results.length > 0 && (
         <div className="card">

@@ -4,6 +4,41 @@ import { Candle, RSIConfig } from '@/types';
 const YAHOO_BASE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
+// Simple in-memory cache for candle data
+// Cache TTL: 5 minutes for intraday data
+const CACHE_TTL = 5 * 60 * 1000;
+
+interface CacheEntry {
+  data: Candle[];
+  timestamp: number;
+}
+
+const candleCache: Map<string, CacheEntry> = new Map();
+
+function getCacheKey(symbol: string, interval: string, source: string): string {
+  return `${source}:${symbol}:${interval}`;
+}
+
+function getCachedCandles(key: string): Candle[] | null {
+  const entry = candleCache.get(key);
+  if (!entry) return null;
+
+  // Check if cache is still valid
+  if (Date.now() - entry.timestamp > CACHE_TTL) {
+    candleCache.delete(key);
+    return null;
+  }
+
+  return entry.data;
+}
+
+function setCachedCandles(key: string, data: Candle[]): void {
+  candleCache.set(key, {
+    data,
+    timestamp: Date.now(),
+  });
+}
+
 // Default list of leveraged ETFs to scan
 const DEFAULT_ETFS = [
   // 3x Leveraged
@@ -98,9 +133,17 @@ interface ScanResult {
   error?: string;
 }
 
-// Fetch candle data from Yahoo Finance
+// Fetch candle data from Yahoo Finance with caching
 // Yahoo limits: 1m = 7 days max, 5m = 60 days max
 async function fetchCandleData(symbol: string, interval: '1m' | '5m', range: string): Promise<Candle[] | null> {
+  const cacheKey = getCacheKey(symbol, interval, 'yahoo');
+
+  // Check cache first
+  const cached = getCachedCandles(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   try {
     const url = `${YAHOO_BASE_URL}/${symbol}?interval=${interval}&range=${range}`;
 
@@ -153,6 +196,11 @@ async function fetchCandleData(symbol: string, interval: '1m' | '5m', range: str
       });
     }
 
+    // Cache the result
+    if (candles.length > 0) {
+      setCachedCandles(cacheKey, candles);
+    }
+
     return candles;
   } catch (err) {
     console.error(`Error fetching ${symbol}:`, err);
@@ -160,7 +208,7 @@ async function fetchCandleData(symbol: string, interval: '1m' | '5m', range: str
   }
 }
 
-// Fetch candle data from Finnhub
+// Fetch candle data from Finnhub with caching
 // Resolution: 1 = 1 minute, 5 = 5 minutes, D = daily
 async function fetchFinnhubCandles(
   symbol: string,
@@ -168,6 +216,14 @@ async function fetchFinnhubCandles(
   daysBack: number,
   apiKey: string
 ): Promise<Candle[] | null> {
+  const cacheKey = getCacheKey(symbol, resolution, 'finnhub');
+
+  // Check cache first
+  const cached = getCachedCandles(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   try {
     const now = Math.floor(Date.now() / 1000);
     const from = now - (daysBack * 24 * 60 * 60);
@@ -201,6 +257,11 @@ async function fetchFinnhubCandles(
       });
     }
 
+    // Cache the result
+    if (candles.length > 0) {
+      setCachedCandles(cacheKey, candles);
+    }
+
     return candles;
   } catch (err) {
     console.error(`Finnhub error for ${symbol}:`, err);
@@ -209,6 +270,7 @@ async function fetchFinnhubCandles(
 }
 
 // Analyze a single timeframe and return metrics
+// Now counts ALL instances where RSI is below threshold (not just crossings)
 function analyzeTimeframe(
   candles: Candle[],
   rsiConfig: RSIConfig,
@@ -228,13 +290,17 @@ function analyzeTimeframe(
   // Look forward 1 trading day
   const maxLookforward = barsPerDay;
 
+  // To avoid counting overlapping signals, skip bars that are within lookforward of previous signal
+  let lastSignalIndex = -maxLookforward;
+
   for (let i = 0; i < rsiValues.length - maxLookforward; i++) {
     const rsi = rsiValues[i];
-    const prevRsi = i > 0 ? rsiValues[i - 1] : 100;
 
-    // Signal: RSI crosses below oversold threshold
-    if (rsi < rsiConfig.oversold && prevRsi >= rsiConfig.oversold) {
+    // Signal: RSI is below oversold threshold
+    // Only count if we're far enough from the last signal to avoid overlap
+    if (rsi < rsiConfig.oversold && (i - lastSignalIndex) >= maxLookforward) {
       totalSignals++;
+      lastSignalIndex = i;
 
       const entryPrice = candles[i + offset].close;
       const target1_5 = entryPrice * 1.015;
@@ -286,7 +352,7 @@ function analyzeTimeframe(
   // Signal strength score
   const winRateScore = winRateAt1_5Pct;
   const riskRewardScore = avgMaxDrawdown > 0 ? Math.min(100, (avgMaxGain / avgMaxDrawdown) * 50) : 50;
-  const sampleSizeScore = totalSignals >= 5 ? 100 : totalSignals >= 3 ? 60 : totalSignals * 15;
+  const sampleSizeScore = totalSignals >= 10 ? 100 : totalSignals >= 5 ? 70 : totalSignals >= 3 ? 50 : totalSignals * 15;
 
   const signalStrength = Math.round(
     (winRateScore * 0.5) + (riskRewardScore * 0.3) + (sampleSizeScore * 0.2)
