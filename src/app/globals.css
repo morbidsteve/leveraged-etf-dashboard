@@ -1,0 +1,266 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0f0f0f;
+  --foreground: #ffffff;
+  --card: #1a1a1a;
+  --card-foreground: #ffffff;
+  --border: #2a2a2a;
+  --muted: #6b7280;
+  --muted-foreground: #9ca3af;
+  --profit: #22c55e;
+  --profit-light: #4ade80;
+  --loss: #ef4444;
+  --loss-light: #f87171;
+  --neutral: #eab308;
+  --neutral-light: #facc15;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #404040;
+}
+
+/* Trading-specific utility classes */
+@layer components {
+  .profit-text {
+    @apply text-profit;
+  }
+
+  .loss-text {
+    @apply text-loss;
+  }
+
+  .neutral-text {
+    @apply text-neutral;
+  }
+
+  .profit-bg {
+    @apply bg-profit/10 border-profit/30;
+  }
+
+  .loss-bg {
+    @apply bg-loss/10 border-loss/30;
+  }
+
+  .neutral-bg {
+    @apply bg-neutral/10 border-neutral/30;
+  }
+
+  .card {
+    @apply bg-dark-card border border-dark-border rounded-lg;
+  }
+
+  .card-header {
+    @apply px-4 py-3 border-b border-dark-border;
+  }
+
+  .card-body {
+    @apply p-4;
+  }
+
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200;
+  }
+
+  .btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700;
+  }
+
+  .btn-success {
+    @apply bg-profit text-white hover:bg-profit-dark;
+  }
+
+  .btn-danger {
+    @apply bg-loss text-white hover:bg-loss-dark;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-gray-400 hover:bg-dark-hover hover:text-white;
+  }
+
+  .input {
+    @apply bg-dark-bg border border-dark-border rounded-md px-3 py-2 text-white
+           placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-gray-400 mb-1;
+  }
+
+  /* Stat card styles */
+  .stat-card {
+    @apply card p-4;
+  }
+
+  .stat-label {
+    @apply text-xs text-gray-500 uppercase tracking-wider;
+  }
+
+  .stat-value {
+    @apply text-2xl font-bold mt-1;
+  }
+
+  /* Price display */
+  .price-display {
+    @apply font-mono text-3xl font-bold;
+  }
+
+  .price-change {
+    @apply font-mono text-lg;
+  }
+
+  /* RSI indicator styles */
+  .rsi-indicator {
+    @apply rounded-full px-4 py-2 font-bold text-lg;
+  }
+
+  .rsi-buy {
+    @apply bg-profit/20 text-profit border border-profit/40;
+  }
+
+  .rsi-sell {
+    @apply bg-loss/20 text-loss border border-loss/40;
+  }
+
+  .rsi-neutral {
+    @apply bg-neutral/20 text-neutral border border-neutral/40;
+  }
+
+  /* Table styles */
+  .table {
+    @apply w-full text-sm;
+  }
+
+  .table th {
+    @apply text-left px-4 py-3 text-gray-500 uppercase tracking-wider text-xs font-medium border-b border-dark-border;
+  }
+
+  .table td {
+    @apply px-4 py-3 border-b border-dark-border;
+  }
+
+  .table tr:hover {
+    @apply bg-dark-hover;
+  }
+
+  /* Navigation */
+  .nav-link {
+    @apply flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg transition-colors;
+  }
+
+  .nav-link.active {
+    @apply text-white bg-dark-hover;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    @apply h-2 bg-dark-border rounded-full overflow-hidden;
+  }
+
+  .progress-bar-fill {
+    @apply h-full rounded-full transition-all duration-300;
+  }
+
+  /* Badge styles */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-profit {
+    @apply bg-profit/20 text-profit;
+  }
+
+  .badge-loss {
+    @apply bg-loss/20 text-loss;
+  }
+
+  .badge-neutral {
+    @apply bg-gray-700 text-gray-300;
+  }
+}
+
+/* Chart container */
+.chart-container {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+}
+
+/* Keyboard shortcuts hint */
+.kbd {
+  @apply inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium
+         bg-dark-border rounded text-gray-400;
+}
+
+/* Animation for live price updates */
+@keyframes flash-green {
+  0% {
+    background-color: rgba(34, 197, 94, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes flash-red {
+  0% {
+    background-color: rgba(239, 68, 68, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.flash-up {
+  animation: flash-green 0.5s ease-out;
+}
+
+.flash-down {
+  animation: flash-red 0.5s ease-out;
+}
+
+/* Hide scrollbar for ticker tape */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
