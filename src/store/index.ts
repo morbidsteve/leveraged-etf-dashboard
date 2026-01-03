@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import {
   Trade,
   TradeEntry,
@@ -37,7 +37,7 @@ interface PriceState {
   setError: (error: string | null) => void;
 }
 
-export const usePriceStore = create<PriceState>((set, get) => ({
+export const usePriceStore = create<PriceState>((set) => ({
   prices: {},
   candles: {},
   rsiData: {},
@@ -87,8 +87,10 @@ export const usePriceStore = create<PriceState>((set, get) => ({
 // Trade Store - for trade management
 interface TradeState {
   trades: Trade[];
+  _hasHydrated: boolean;
 
   // Actions
+  setHasHydrated: (state: boolean) => void;
   addTrade: (trade: Omit<Trade, 'id' | 'createdAt' | 'avgCost' | 'totalShares' | 'realizedPnL' | 'unrealizedPnL'>) => Trade;
   updateTrade: (id: string, updates: Partial<Trade>) => void;
   deleteTrade: (id: string) => void;
@@ -104,6 +106,9 @@ export const useTradeStore = create<TradeState>()(
   persist(
     (set, get) => ({
       trades: [],
+      _hasHydrated: false,
+
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
 
       addTrade: (tradeData) => {
         const newTrade: Trade = {
@@ -195,7 +200,11 @@ export const useTradeStore = create<TradeState>()(
     }),
     {
       name: 'trade-storage',
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ trades: state.trades }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );
@@ -204,8 +213,10 @@ export const useTradeStore = create<TradeState>()(
 interface AlertState {
   alerts: Alert[];
   settings: AlertSettings;
+  _hasHydrated: boolean;
 
   // Actions
+  setHasHydrated: (state: boolean) => void;
   addAlert: (alert: Omit<Alert, 'id' | 'timestamp' | 'acknowledged'>) => void;
   acknowledgeAlert: (id: string) => void;
   clearAlerts: () => void;
@@ -214,8 +225,9 @@ interface AlertState {
 
 export const useAlertStore = create<AlertState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       alerts: [],
+      _hasHydrated: false,
       settings: {
         id: 'default',
         ticker: 'TQQQ',
@@ -231,6 +243,8 @@ export const useAlertStore = create<AlertState>()(
         cooldownMinutes: 5,
         enabled: true,
       },
+
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
 
       addAlert: (alertData) =>
         set((state) => ({
@@ -261,6 +275,10 @@ export const useAlertStore = create<AlertState>()(
     }),
     {
       name: 'alert-storage',
+      storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );
@@ -268,6 +286,8 @@ export const useAlertStore = create<AlertState>()(
 // App Settings Store
 interface SettingsState {
   settings: AppSettings;
+  _hasHydrated: boolean;
+  setHasHydrated: (state: boolean) => void;
   updateSettings: (updates: Partial<AppSettings>) => void;
   updateRSIConfig: (config: Partial<RSIConfig>) => void;
 }
@@ -296,6 +316,9 @@ export const useSettingsStore = create<SettingsState>()(
         },
         refreshInterval: 5000, // 5 seconds
       },
+      _hasHydrated: false,
+
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
 
       updateSettings: (updates) =>
         set((state) => ({
@@ -312,6 +335,10 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
+      storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

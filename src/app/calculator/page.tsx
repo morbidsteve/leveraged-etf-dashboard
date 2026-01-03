@@ -3,12 +3,13 @@
 import { useState, useMemo } from 'react';
 import { MainLayout } from '@/components/Layout';
 import { calculateDCA, formatCurrency, formatPrice, formatShares } from '@/lib/calculations';
-import { usePriceData } from '@/hooks/usePriceData';
+import { usePriceData, useHydration } from '@/hooks';
 import { useTradeStore } from '@/store';
 
 const QUICK_SHARES = [100, 250, 500, 1000];
 
 export default function CalculatorPage() {
+  const hydrated = useHydration();
   const [currentShares, setCurrentShares] = useState<number>(0);
   const [currentAvgCost, setCurrentAvgCost] = useState<number>(0);
   const [newShares, setNewShares] = useState<number>(0);
@@ -19,7 +20,8 @@ export default function CalculatorPage() {
     refreshInterval: 10000,
   });
 
-  const openTrades = useTradeStore((state) => state.getOpenTrades());
+  const trades = useTradeStore((state) => state.trades);
+  const openTrades = useMemo(() => trades.filter(t => t.status === 'open'), [trades]);
 
   // Calculate DCA result
   const result = useMemo(() => {
@@ -53,6 +55,21 @@ export default function CalculatorPage() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
+
+  if (!hydrated) {
+    return (
+      <MainLayout>
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-2xl font-bold text-white mb-6">DCA Calculator</h1>
+          <div className="card">
+            <div className="card-body text-center py-12 text-gray-500">
+              Loading...
+            </div>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
