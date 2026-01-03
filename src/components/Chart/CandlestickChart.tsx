@@ -54,6 +54,8 @@ export default function CandlestickChart({
 
     // Create main chart
     const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: showRSI ? Math.floor(height * 0.7) : height,
       layout: {
         background: { color: '#1a1a1a' },
         textColor: '#9ca3af',
@@ -143,6 +145,8 @@ export default function CandlestickChart({
     // Create RSI chart if enabled
     if (showRSI && rsiContainerRef.current) {
       const rsiChart = createChart(rsiContainerRef.current, {
+        width: rsiContainerRef.current.clientWidth,
+        height: Math.floor(height * 0.3),
         layout: {
           background: { color: '#1a1a1a' },
           textColor: '#9ca3af',
@@ -231,7 +235,7 @@ export default function CandlestickChart({
       chart.remove();
       rsiChartRef.current?.remove();
     };
-  }, [showRSI, showVolume, onCrosshairMove]);
+  }, [showRSI, showVolume, onCrosshairMove, height]);
 
   // Update data when candles change
   useEffect(() => {
