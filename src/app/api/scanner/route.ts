@@ -288,7 +288,11 @@ function analyzeTimeframe(
   let totalMaxDrawdown = 0;
 
   // Look forward 1 week (5 trading days) for performance measurement
-  const maxLookforward = barsPerDay * 5;
+  // But cap at available data - for 7-day 1m data, we can only look forward ~1 day
+  const idealLookforward = barsPerDay * 5;
+  const availableBars = rsiValues.length;
+  // Need at least some bars to analyze, so cap lookforward to leave room for signals
+  const maxLookforward = Math.min(idealLookforward, Math.floor(availableBars * 0.7));
 
   for (let i = 1; i < rsiValues.length - maxLookforward; i++) {
     const rsi = rsiValues[i];
