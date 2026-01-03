@@ -7,20 +7,25 @@ import { RSIIndicator, RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
 import { QuickStats, OpenPositions } from '@/components/Dashboard';
 import { usePriceData, useHydration, useStoreHydration } from '@/hooks';
-import { useTradeStore, usePriceStore } from '@/store';
+import { useTradeStore, usePriceStore, useSettingsStore } from '@/store';
 import { calculatePortfolioSummary } from '@/lib/calculations';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 
 export default function DashboardPage() {
   const hydrated = useHydration();
   const storeHydrated = useStoreHydration();
+  const settings = useSettingsStore((state) => state.settings);
+
+  // Use stored RSI config or default if not hydrated
+  const rsiConfig = storeHydrated ? settings.rsiConfig : DEFAULT_RSI_CONFIG;
 
   const { priceData, candles, rsiData, isLoading, error, refresh } = usePriceData({
     ticker: 'TQQQ',
     interval: '1m',
     range: '5d',
-    refreshInterval: 10000, // 10 seconds
-    enabled: hydrated, // Only fetch data after hydration
+    refreshInterval: 10000,
+    enabled: hydrated,
+    rsiConfig,
   });
 
   const trades = useTradeStore((state) => state.trades);
@@ -68,7 +73,7 @@ export default function DashboardPage() {
         {/* RSI Card */}
         <div className="card w-full lg:w-80">
           <div className="card-body">
-            <RSIGauge data={rsiData} config={DEFAULT_RSI_CONFIG} />
+            <RSIGauge data={rsiData} config={rsiConfig} />
           </div>
         </div>
       </div>
@@ -98,9 +103,12 @@ export default function DashboardPage() {
           {candles.length > 0 ? (
             <CandlestickChart
               candles={candles}
-              rsiConfig={DEFAULT_RSI_CONFIG}
+              trades={trades.filter((t) => t.ticker === 'TQQQ')}
+              rsiConfig={rsiConfig}
               showRSI={true}
               showVolume={true}
+              showTradeMarkers={true}
+              showRSICrossings={true}
               height={500}
             />
           ) : (

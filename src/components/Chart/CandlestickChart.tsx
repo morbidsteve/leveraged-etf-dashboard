@@ -12,24 +12,110 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  SeriesMarker,
+  createSeriesMarkers,
+  ISeriesMarkersPluginApi,
 } from 'lightweight-charts';
-import { Candle, RSIConfig } from '@/types';
+import { Candle, RSIConfig, Trade } from '@/types';
 import { calculateRSIWithTimestamps, DEFAULT_RSI_CONFIG } from '@/lib/rsi';
+
+interface TradeMarker {
+  time: number; // Unix timestamp in seconds
+  type: 'buy' | 'sell';
+  price: number;
+  shares: number;
+}
+
+interface RSICrossing {
+  time: number;
+  type: 'oversold' | 'overbought';
+  rsiValue: number;
+}
 
 interface CandlestickChartProps {
   candles: Candle[];
+  trades?: Trade[];
   rsiConfig?: RSIConfig;
   showRSI?: boolean;
   showVolume?: boolean;
+  showTradeMarkers?: boolean;
+  showRSICrossings?: boolean;
   height?: number;
   onCrosshairMove?: (price: number | null, time: Time | null) => void;
 }
 
+// Helper to extract trade markers from trades
+function extractTradeMarkers(trades: Trade[]): TradeMarker[] {
+  const markers: TradeMarker[] = [];
+
+  for (const trade of trades) {
+    // Add entry markers (buys)
+    for (const entry of trade.entries) {
+      const date = new Date(entry.date);
+      markers.push({
+        time: Math.floor(date.getTime() / 1000),
+        type: 'buy',
+        price: entry.price,
+        shares: entry.shares,
+      });
+    }
+
+    // Add exit markers (sells)
+    for (const exit of trade.exits) {
+      const date = new Date(exit.date);
+      markers.push({
+        time: Math.floor(date.getTime() / 1000),
+        type: 'sell',
+        price: exit.price,
+        shares: exit.shares,
+      });
+    }
+  }
+
+  return markers.sort((a, b) => a.time - b.time);
+}
+
+// Helper to detect RSI threshold crossings
+function detectRSICrossings(
+  rsiData: { time: number; value: number }[],
+  config: RSIConfig
+): RSICrossing[] {
+  const crossings: RSICrossing[] = [];
+
+  for (let i = 1; i < rsiData.length; i++) {
+    const prev = rsiData[i - 1];
+    const curr = rsiData[i];
+
+    // Crossing below oversold (entering oversold zone)
+    if (prev.value >= config.oversold && curr.value < config.oversold) {
+      crossings.push({
+        time: curr.time,
+        type: 'oversold',
+        rsiValue: curr.value,
+      });
+    }
+
+    // Crossing above overbought (entering overbought zone)
+    if (prev.value <= config.overbought && curr.value > config.overbought) {
+      crossings.push({
+        time: curr.time,
+        type: 'overbought',
+        rsiValue: curr.value,
+      });
+    }
+  }
+
+  return crossings;
+}
+
 export default function CandlestickChart({
   candles,
+  trades = [],
   rsiConfig = DEFAULT_RSI_CONFIG,
   showRSI = true,
   showVolume = true,
+  showTradeMarkers = true,
+  showRSICrossings = true,
   height = 500,
   onCrosshairMove,
 }: CandlestickChartProps) {
@@ -47,6 +133,7 @@ export default function CandlestickChart({
   const overboughtLineRef = useRef<ISeriesApi<any> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const oversoldLineRef = useRef<ISeriesApi<any> | null>(null);
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [chartReady, setChartReady] = useState(false);
 
@@ -139,6 +226,9 @@ export default function CandlestickChart({
     });
 
     candlestickSeriesRef.current = candlestickSeries;
+
+    // Create markers plugin for the candlestick series
+    markersPluginRef.current = createSeriesMarkers(candlestickSeries, []);
 
     // Add volume series
     if (showVolume) {
@@ -252,6 +342,7 @@ export default function CandlestickChart({
       rsiSeriesRef.current = null;
       overboughtLineRef.current = null;
       oversoldLineRef.current = null;
+      markersPluginRef.current = null;
       setChartReady(false);
     };
   }, [containerWidth, mainChartHeight, rsiChartHeight, showRSI, showVolume, onCrosshairMove]);
@@ -294,41 +385,87 @@ export default function CandlestickChart({
       volumeSeriesRef.current.setData(volumeData);
     }
 
+    // Calculate RSI data (needed for both RSI chart and crossing markers)
+    const rsiData = calculateRSIWithTimestamps(candles, rsiConfig.period);
+
     // Update RSI
-    if (rsiSeriesRef.current && showRSI) {
-      const rsiData = calculateRSIWithTimestamps(candles, rsiConfig.period);
+    if (rsiSeriesRef.current && showRSI && rsiData.length > 0) {
+      const rsiLineData: LineData[] = rsiData.map((point) => ({
+        time: point.time as Time,
+        value: point.value,
+      }));
 
-      if (rsiData.length > 0) {
-        const rsiLineData: LineData[] = rsiData.map((point) => ({
-          time: point.time as Time,
-          value: point.value,
-        }));
+      rsiSeriesRef.current.setData(rsiLineData);
 
-        rsiSeriesRef.current.setData(rsiLineData);
+      if (overboughtLineRef.current) {
+        overboughtLineRef.current.setData(
+          rsiData.map((point) => ({
+            time: point.time as Time,
+            value: rsiConfig.overbought,
+          }))
+        );
+      }
 
-        if (overboughtLineRef.current) {
-          overboughtLineRef.current.setData(
-            rsiData.map((point) => ({
-              time: point.time as Time,
-              value: rsiConfig.overbought,
-            }))
-          );
+      if (oversoldLineRef.current) {
+        oversoldLineRef.current.setData(
+          rsiData.map((point) => ({
+            time: point.time as Time,
+            value: rsiConfig.oversold,
+          }))
+        );
+      }
+    }
+
+    // Build markers array for the price chart
+    const markers: SeriesMarker<Time>[] = [];
+
+    // Add trade markers (buy/sell)
+    if (showTradeMarkers && trades.length > 0) {
+      const tradeMarkers = extractTradeMarkers(trades);
+
+      for (const marker of tradeMarkers) {
+        markers.push({
+          time: marker.time as Time,
+          position: marker.type === 'buy' ? 'belowBar' : 'aboveBar',
+          color: marker.type === 'buy' ? '#22c55e' : '#ef4444',
+          shape: marker.type === 'buy' ? 'arrowUp' : 'arrowDown',
+          text: `${marker.type === 'buy' ? 'B' : 'S'} ${marker.shares}@${marker.price.toFixed(2)}`,
+        });
+      }
+    }
+
+    // Add RSI crossing markers
+    if (showRSICrossings && rsiData.length > 0) {
+      const crossings = detectRSICrossings(rsiData, rsiConfig);
+
+      for (const crossing of crossings) {
+        // Find the candle at this time to get the price
+        const candle = candles.find((c) => c.time === crossing.time);
+        if (candle) {
+          markers.push({
+            time: crossing.time as Time,
+            position: crossing.type === 'oversold' ? 'belowBar' : 'aboveBar',
+            color: crossing.type === 'oversold' ? '#22c55e' : '#ef4444',
+            shape: 'circle',
+            text: `RSI ${crossing.rsiValue.toFixed(1)}`,
+          });
         }
+      }
+    }
 
-        if (oversoldLineRef.current) {
-          oversoldLineRef.current.setData(
-            rsiData.map((point) => ({
-              time: point.time as Time,
-              value: rsiConfig.oversold,
-            }))
-          );
-        }
+    // Sort markers by time and apply using markers plugin
+    if (markersPluginRef.current) {
+      if (markers.length > 0) {
+        markers.sort((a, b) => (a.time as number) - (b.time as number));
+        markersPluginRef.current.setMarkers(markers);
+      } else {
+        markersPluginRef.current.setMarkers([]);
       }
     }
 
     // Fit content
     chartRef.current?.timeScale().fitContent();
-  }, [candles, rsiConfig, showRSI, showVolume, chartReady]); // chartReady triggers re-run when chart is created
+  }, [candles, rsiConfig, showRSI, showVolume, showTradeMarkers, showRSICrossings, trades, chartReady]);
 
   return (
     <div className="w-full">

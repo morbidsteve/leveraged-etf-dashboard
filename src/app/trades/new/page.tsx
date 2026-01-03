@@ -4,12 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/Layout';
 import { useTradeStore } from '@/store';
-import { usePriceData } from '@/hooks/usePriceData';
+import { usePriceData, useHydration, useStoreHydration } from '@/hooks';
 import { formatPrice } from '@/lib/calculations';
 import { TradeEntry } from '@/types';
 
 export default function NewTradePage() {
   const router = useRouter();
+  const hydrated = useHydration();
+  const storeHydrated = useStoreHydration();
   const addTrade = useTradeStore((state) => state.addTrade);
 
   const [ticker, setTicker] = useState('TQQQ');
@@ -22,6 +24,7 @@ export default function NewTradePage() {
   const { priceData } = usePriceData({
     ticker,
     refreshInterval: 10000,
+    enabled: hydrated,
   });
 
   const addEntry = () => {
@@ -75,6 +78,16 @@ export default function NewTradePage() {
   const totalShares = entries.reduce((sum, e) => sum + e.shares, 0);
   const totalCost = entries.reduce((sum, e) => sum + e.price * e.shares, 0);
   const avgCost = totalShares > 0 ? totalCost / totalShares : 0;
+
+  if (!hydrated || !storeHydrated) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[400px] text-gray-500">
+          <span className="animate-pulse">Loading...</span>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>

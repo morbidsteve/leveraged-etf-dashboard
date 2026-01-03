@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { PriceData, Candle, RSIData } from '@/types';
+import { PriceData, Candle, RSIData, RSIConfig } from '@/types';
 import { getRSIData, DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 import { usePriceStore } from '@/store';
 
@@ -11,6 +11,7 @@ interface UsePriceDataOptions {
   range?: '1d' | '5d' | '1mo' | '3mo';
   refreshInterval?: number;
   enabled?: boolean;
+  rsiConfig?: RSIConfig;
 }
 
 interface UsePriceDataReturn {
@@ -28,6 +29,7 @@ export function usePriceData({
   range = '5d',
   refreshInterval = 5000,
   enabled = true,
+  rsiConfig = DEFAULT_RSI_CONFIG,
 }: UsePriceDataOptions): UsePriceDataReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,8 +74,8 @@ export function usePriceData({
       if (candlesData.candles) {
         setCandles(ticker, candlesData.candles);
 
-        // Calculate RSI
-        const rsi = getRSIData(candlesData.candles, DEFAULT_RSI_CONFIG);
+        // Calculate RSI with provided config
+        const rsi = getRSIData(candlesData.candles, rsiConfig);
         setRSIData(ticker, rsi);
       }
     } catch (err) {
@@ -81,7 +83,7 @@ export function usePriceData({
     } finally {
       setIsLoading(false);
     }
-  }, [ticker, interval, range, enabled, setPrice, setCandles, setRSIData]);
+  }, [ticker, interval, range, enabled, rsiConfig, setPrice, setCandles, setRSIData]);
 
   // Initial fetch
   useEffect(() => {

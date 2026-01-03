@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Candle, RSIConfig } from '@/types';
+import { Candle, RSIConfig, Trade } from '@/types';
 import { Time } from 'lightweight-charts';
 
 const CandlestickChart = dynamic(() => import('./CandlestickChart'), {
@@ -15,9 +15,12 @@ const CandlestickChart = dynamic(() => import('./CandlestickChart'), {
 
 interface DynamicChartProps {
   candles: Candle[];
+  trades?: Trade[];
   rsiConfig?: RSIConfig;
   showRSI?: boolean;
   showVolume?: boolean;
+  showTradeMarkers?: boolean;
+  showRSICrossings?: boolean;
   height?: number;
   onCrosshairMove?: (price: number | null, time: Time | null) => void;
 }
