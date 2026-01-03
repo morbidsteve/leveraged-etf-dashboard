@@ -5,7 +5,7 @@ import { MainLayout } from '@/components/Layout';
 import { CandlestickChart } from '@/components/Chart';
 import { RSIIndicator } from '@/components/RSI';
 import { PriceDisplay } from '@/components/Price';
-import { usePriceData } from '@/hooks/usePriceData';
+import { usePriceData, useHydration } from '@/hooks';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 import { ChartTimeframe } from '@/types';
 
@@ -20,6 +20,7 @@ const TIMEFRAMES: ChartTimeframe[] = [
 const TICKERS = ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'];
 
 export default function ChartPage() {
+  const hydrated = useHydration();
   const [selectedTicker, setSelectedTicker] = useState('TQQQ');
   const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>(TIMEFRAMES[0]);
 
@@ -30,7 +31,18 @@ export default function ChartPage() {
     interval: selectedTimeframe.value,
     range,
     refreshInterval: selectedTimeframe.minutes <= 5 ? 10000 : 30000,
+    enabled: hydrated, // Only fetch after hydration
   });
+
+  if (!hydrated) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[600px] text-gray-500">
+          <span className="animate-pulse">Loading chart...</span>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
