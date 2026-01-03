@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { MainLayout } from '@/components/Layout';
 import { formatCurrency, formatPercent } from '@/lib/calculations';
 
@@ -85,6 +85,200 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
   );
 }
 
+// Expanded Detail Row Component
+function ExpandedDetail({ result, oversold }: { result: ScanResult; oversold: number }) {
+  const { shortTerm, longTerm } = result;
+
+  return (
+    <tr>
+      <td colSpan={10} className="p-0 bg-dark-bg">
+        <div className="p-6 border-t border-dark-border">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <h3 className="text-lg font-bold text-white">{result.symbol} - Detailed Analysis</h3>
+              {result.isCurrentlyOversold && (
+                <span className="badge badge-success">Currently Oversold (RSI {result.currentRSI.toFixed(1)})</span>
+              )}
+            </div>
+            <div className="text-sm text-gray-400">
+              Current Price: <span className="font-mono text-white">{formatCurrency(result.currentPrice)}</span>
+            </div>
+          </div>
+
+          {/* Two Column Layout for Timeframes */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Short-Term (7 Days) */}
+            <div className="p-4 rounded-lg border border-profit/30 bg-profit/5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-3 h-3 rounded-full bg-profit"></div>
+                <h4 className="font-medium text-profit">Short-Term Analysis (7 Days)</h4>
+              </div>
+
+              <div className="space-y-3 text-sm">
+                <div className="p-3 bg-dark-card rounded">
+                  <p className="text-gray-500 text-xs mb-1">Data Source</p>
+                  <p className="text-white">1-minute candles over 7 trading days</p>
+                  <p className="text-gray-400 text-xs mt-1">{shortTerm.dataPoints.toLocaleString()} data points analyzed</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">RSI Signals Found</p>
+                    <p className="text-2xl font-bold text-white">{shortTerm.totalSignals}</p>
+                    <p className="text-gray-400 text-xs">Times RSI crossed below {oversold}</p>
+                  </div>
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">Win Rate @ 1.5%</p>
+                    <p className={`text-2xl font-bold ${shortTerm.winRateAt1_5Pct >= 60 ? 'text-profit' : shortTerm.winRateAt1_5Pct >= 40 ? 'text-neutral' : 'text-loss'}`}>
+                      {shortTerm.winRateAt1_5Pct.toFixed(1)}%
+                    </p>
+                    <p className="text-gray-400 text-xs">{shortTerm.winsAt1_5Pct} of {shortTerm.totalSignals} signals hit +1.5%</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">Win Rate @ 2%</p>
+                    <p className={`text-xl font-bold ${shortTerm.winRateAt2Pct >= 50 ? 'text-profit' : shortTerm.winRateAt2Pct >= 30 ? 'text-neutral' : 'text-loss'}`}>
+                      {shortTerm.winRateAt2Pct.toFixed(1)}%
+                    </p>
+                    <p className="text-gray-400 text-xs">{shortTerm.winsAt2Pct} of {shortTerm.totalSignals} signals hit +2%</p>
+                  </div>
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">Avg Time to Target</p>
+                    <p className="text-xl font-bold text-white">{minsToTime(shortTerm.avgMinsTo1_5Pct)}</p>
+                    <p className="text-gray-400 text-xs">{Math.round(shortTerm.avgMinsTo1_5Pct)} minutes on average</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">Avg Max Gain</p>
+                    <p className="text-xl font-bold text-profit">+{(shortTerm.avgMaxGain * 100).toFixed(2)}%</p>
+                    <p className="text-gray-400 text-xs">Highest point reached per signal</p>
+                  </div>
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">Avg Max Drawdown</p>
+                    <p className="text-xl font-bold text-loss">{(shortTerm.avgMaxDrawdown * 100).toFixed(2)}%</p>
+                    <p className="text-gray-400 text-xs">Worst dip before hitting target</p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-dark-card rounded">
+                  <p className="text-gray-500 text-xs mb-1">Signal Strength Score</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-3 bg-dark-border rounded overflow-hidden">
+                      <div
+                        className={`h-full rounded ${shortTerm.signalStrength >= 70 ? 'bg-profit' : shortTerm.signalStrength >= 50 ? 'bg-neutral' : 'bg-loss'}`}
+                        style={{ width: `${shortTerm.signalStrength}%` }}
+                      />
+                    </div>
+                    <span className="font-bold text-white">{shortTerm.signalStrength}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Long-Term (60 Days) */}
+            <div className="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-3 h-3 rounded-full bg-blue-400"></div>
+                <h4 className="font-medium text-blue-400">Long-Term Analysis (60 Days)</h4>
+              </div>
+
+              <div className="space-y-3 text-sm">
+                <div className="p-3 bg-dark-card rounded">
+                  <p className="text-gray-500 text-xs mb-1">Data Source</p>
+                  <p className="text-white">5-minute candles over 60 trading days</p>
+                  <p className="text-gray-400 text-xs mt-1">{longTerm.dataPoints.toLocaleString()} data points analyzed</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">RSI Signals Found</p>
+                    <p className="text-2xl font-bold text-white">{longTerm.totalSignals}</p>
+                    <p className="text-gray-400 text-xs">Times RSI crossed below {oversold}</p>
+                  </div>
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">Win Rate @ 1.5%</p>
+                    <p className={`text-2xl font-bold ${longTerm.winRateAt1_5Pct >= 60 ? 'text-profit' : longTerm.winRateAt1_5Pct >= 40 ? 'text-neutral' : 'text-loss'}`}>
+                      {longTerm.winRateAt1_5Pct.toFixed(1)}%
+                    </p>
+                    <p className="text-gray-400 text-xs">{longTerm.winsAt1_5Pct} of {longTerm.totalSignals} signals hit +1.5%</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">Win Rate @ 2%</p>
+                    <p className={`text-xl font-bold ${longTerm.winRateAt2Pct >= 50 ? 'text-profit' : longTerm.winRateAt2Pct >= 30 ? 'text-neutral' : 'text-loss'}`}>
+                      {longTerm.winRateAt2Pct.toFixed(1)}%
+                    </p>
+                    <p className="text-gray-400 text-xs">{longTerm.winsAt2Pct} of {longTerm.totalSignals} signals hit +2%</p>
+                  </div>
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">Avg Time to Target</p>
+                    <p className="text-xl font-bold text-white">{minsToTime(longTerm.avgMinsTo1_5Pct)}</p>
+                    <p className="text-gray-400 text-xs">{Math.round(longTerm.avgMinsTo1_5Pct)} minutes on average</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">Avg Max Gain</p>
+                    <p className="text-xl font-bold text-profit">+{(longTerm.avgMaxGain * 100).toFixed(2)}%</p>
+                    <p className="text-gray-400 text-xs">Highest point reached per signal</p>
+                  </div>
+                  <div className="p-3 bg-dark-card rounded">
+                    <p className="text-gray-500 text-xs mb-1">Avg Max Drawdown</p>
+                    <p className="text-xl font-bold text-loss">{(longTerm.avgMaxDrawdown * 100).toFixed(2)}%</p>
+                    <p className="text-gray-400 text-xs">Worst dip before hitting target</p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-dark-card rounded">
+                  <p className="text-gray-500 text-xs mb-1">Signal Strength Score</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-3 bg-dark-border rounded overflow-hidden">
+                      <div
+                        className={`h-full rounded ${longTerm.signalStrength >= 70 ? 'bg-profit' : longTerm.signalStrength >= 50 ? 'bg-neutral' : 'bg-loss'}`}
+                        style={{ width: `${longTerm.signalStrength}%` }}
+                      />
+                    </div>
+                    <span className="font-bold text-white">{longTerm.signalStrength}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Combined Score Explanation */}
+          <div className="mt-6 p-4 rounded-lg border border-dark-border bg-dark-card">
+            <h4 className="font-medium text-white mb-3">Combined Score: {result.combinedScore}</h4>
+            <p className="text-sm text-gray-400">
+              The combined score weighs short-term data (60%) higher than long-term data (40%) because recent market behavior
+              is more predictive. Formula: <code className="bg-dark-bg px-2 py-1 rounded text-xs">0.6 × {shortTerm.signalStrength} + 0.4 × {longTerm.signalStrength} = {result.combinedScore}</code>
+            </p>
+          </div>
+
+          {/* Interpretation Guide */}
+          <div className="mt-4 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5">
+            <h4 className="font-medium text-yellow-400 mb-2">How to Read This Data</h4>
+            <ul className="text-sm text-gray-400 space-y-1">
+              <li><strong className="text-white">Signals:</strong> Each time RSI dropped below {oversold}, we tracked what happened over the next 390 minutes (1 trading day)</li>
+              <li><strong className="text-white">Win Rate:</strong> What % of those signals resulted in price hitting +1.5% or +2% from the signal point</li>
+              <li><strong className="text-white">Avg Time:</strong> How long it typically takes to hit the target when successful</li>
+              <li><strong className="text-white">Max Gain/Drawdown:</strong> The best and worst points reached, helping you set stops and targets</li>
+              <li><strong className="text-white">Consistent = Good:</strong> Look for ETFs where <span className="text-profit">both</span> timeframes show high win rates. This confirms the pattern is reliable.</li>
+            </ul>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export default function ScannerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<ScanResult[]>([]);
@@ -92,6 +286,7 @@ export default function ScannerPage() {
   const [lastScan, setLastScan] = useState<string | null>(null);
   const [methodology, setMethodology] = useState<Methodology | null>(null);
   const [dataSource, setDataSource] = useState<'yahoo' | 'finnhub'>('yahoo');
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
 
   // Scanner settings - defaults for intraday analysis
   const [period, setPeriod] = useState(14); // Standard 14-period RSI
@@ -672,60 +867,75 @@ export default function ScannerPage() {
                   filteredResults.map((result) => {
                     const metrics = getMetrics(result);
                     const score = getScore(result);
+                    const isExpanded = expandedSymbol === result.symbol;
                     return (
-                      <tr key={result.symbol} className={result.isCurrentlyOversold ? 'bg-profit/5' : ''}>
-                        <td className="font-medium text-white">
-                          <div className="flex items-center gap-2">
-                            {result.symbol}
-                            {result.isCurrentlyOversold && (
-                              <span className="badge badge-success text-xs">OVERSOLD</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="font-mono">{formatCurrency(result.currentPrice)}</td>
-                        <td className={`font-mono ${result.currentRSI < oversold ? 'text-profit' : result.currentRSI > 70 ? 'text-loss' : 'text-neutral'}`}>
-                          {result.currentRSI.toFixed(1)}
-                        </td>
-                        <td className="font-mono">
-                          {viewMode === 'combined' ? (
-                            <span className="flex gap-1">
-                              <span className="text-profit">{result.shortTerm.totalSignals}</span>
-                              <span className="text-gray-500">/</span>
-                              <span className="text-blue-400">{result.longTerm.totalSignals}</span>
-                            </span>
-                          ) : (
-                            metrics.totalSignals
-                          )}
-                        </td>
-                        <td className={`font-mono ${metrics.winRateAt1_5Pct >= 70 ? 'text-profit' : metrics.winRateAt1_5Pct >= 50 ? 'text-neutral' : 'text-loss'}`}>
-                          {viewMode === 'combined' ? (
-                            <span className="flex gap-1">
-                              <span className="text-profit">{result.shortTerm.winRateAt1_5Pct.toFixed(0)}%</span>
-                              <span className="text-gray-500">/</span>
-                              <span className="text-blue-400">{result.longTerm.winRateAt1_5Pct.toFixed(0)}%</span>
-                            </span>
-                          ) : (
-                            `${metrics.winRateAt1_5Pct.toFixed(1)}%`
-                          )}
-                        </td>
-                        <td className={`font-mono ${metrics.winRateAt2Pct >= 60 ? 'text-profit' : metrics.winRateAt2Pct >= 40 ? 'text-neutral' : 'text-loss'}`}>
-                          {metrics.winRateAt2Pct.toFixed(1)}%
-                        </td>
-                        <td className="font-mono">{minsToTime(metrics.avgMinsTo1_5Pct)}</td>
-                        <td className="font-mono text-profit">{formatPercent(metrics.avgMaxGain)}</td>
-                        <td className="font-mono text-loss">{formatPercent(metrics.avgMaxDrawdown)}</td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-2 bg-dark-border rounded overflow-hidden">
-                              <div
-                                className={`h-full rounded ${score >= 70 ? 'bg-profit' : score >= 50 ? 'bg-neutral' : 'bg-loss'}`}
-                                style={{ width: `${score}%` }}
-                              />
+                      <React.Fragment key={result.symbol}>
+                        <tr
+                          className={`cursor-pointer transition-colors hover:bg-dark-bg ${result.isCurrentlyOversold ? 'bg-profit/5' : ''} ${isExpanded ? 'bg-dark-bg' : ''}`}
+                          onClick={() => setExpandedSymbol(isExpanded ? null : result.symbol)}
+                        >
+                          <td className="font-medium text-white">
+                            <div className="flex items-center gap-2">
+                              <svg
+                                className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                              {result.symbol}
+                              {result.isCurrentlyOversold && (
+                                <span className="badge badge-success text-xs">OVERSOLD</span>
+                              )}
                             </div>
-                            <span className="font-mono text-xs">{score}</span>
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="font-mono">{formatCurrency(result.currentPrice)}</td>
+                          <td className={`font-mono ${result.currentRSI < oversold ? 'text-profit' : result.currentRSI > 70 ? 'text-loss' : 'text-neutral'}`}>
+                            {result.currentRSI.toFixed(1)}
+                          </td>
+                          <td className="font-mono">
+                            {viewMode === 'combined' ? (
+                              <span className="flex gap-1">
+                                <span className="text-profit">{result.shortTerm.totalSignals}</span>
+                                <span className="text-gray-500">/</span>
+                                <span className="text-blue-400">{result.longTerm.totalSignals}</span>
+                              </span>
+                            ) : (
+                              metrics.totalSignals
+                            )}
+                          </td>
+                          <td className={`font-mono ${metrics.winRateAt1_5Pct >= 70 ? 'text-profit' : metrics.winRateAt1_5Pct >= 50 ? 'text-neutral' : 'text-loss'}`}>
+                            {viewMode === 'combined' ? (
+                              <span className="flex gap-1">
+                                <span className="text-profit">{result.shortTerm.winRateAt1_5Pct.toFixed(0)}%</span>
+                                <span className="text-gray-500">/</span>
+                                <span className="text-blue-400">{result.longTerm.winRateAt1_5Pct.toFixed(0)}%</span>
+                              </span>
+                            ) : (
+                              `${metrics.winRateAt1_5Pct.toFixed(1)}%`
+                            )}
+                          </td>
+                          <td className={`font-mono ${metrics.winRateAt2Pct >= 60 ? 'text-profit' : metrics.winRateAt2Pct >= 40 ? 'text-neutral' : 'text-loss'}`}>
+                            {metrics.winRateAt2Pct.toFixed(1)}%
+                          </td>
+                          <td className="font-mono">{minsToTime(metrics.avgMinsTo1_5Pct)}</td>
+                          <td className="font-mono text-profit">{formatPercent(metrics.avgMaxGain)}</td>
+                          <td className="font-mono text-loss">{formatPercent(metrics.avgMaxDrawdown)}</td>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-2 bg-dark-border rounded overflow-hidden">
+                                <div
+                                  className={`h-full rounded ${score >= 70 ? 'bg-profit' : score >= 50 ? 'bg-neutral' : 'bg-loss'}`}
+                                  style={{ width: `${score}%` }}
+                                />
+                              </div>
+                              <span className="font-mono text-xs">{score}</span>
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && <ExpandedDetail result={result} oversold={oversold} />}
+                      </React.Fragment>
                     );
                   })
                 )}
