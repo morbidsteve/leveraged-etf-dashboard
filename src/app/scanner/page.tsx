@@ -97,8 +97,8 @@ export default function ScannerPage() {
   const [period, setPeriod] = useState(14); // Standard 14-period RSI
   const [oversold, setOversold] = useState(50); // User's preferred threshold
   const [customSymbols, setCustomSymbols] = useState('');
-  const [minWinRate, setMinWinRate] = useState(60);
-  const [minSignals, setMinSignals] = useState(3);
+  const [minWinRate, setMinWinRate] = useState(0); // Default to 0 to show all
+  const [minSignals, setMinSignals] = useState(1); // Default to 1 to show all with any signals
   const [showOnlyOversold, setShowOnlyOversold] = useState(false);
   const [viewMode, setViewMode] = useState<'combined' | 'shortTerm' | 'longTerm'>('combined');
 
@@ -188,7 +188,7 @@ export default function ScannerPage() {
     return result.combinedScore;
   };
 
-  // Filter results
+  // Filter results and track why they're filtered
   const filteredResults = results.filter(r => {
     if (r.error) return false;
     const metrics = getMetrics(r);
@@ -196,6 +196,21 @@ export default function ScannerPage() {
     if (metrics.totalSignals < minSignals) return false;
     if (showOnlyOversold && !r.isCurrentlyOversold) return false;
     return true;
+  });
+
+  // Get filtered out results with reasons
+  const filteredOutResults = results.filter(r => !r.error).filter(r => {
+    const metrics = getMetrics(r);
+    return metrics.winRateAt1_5Pct < minWinRate ||
+           metrics.totalSignals < minSignals ||
+           (showOnlyOversold && !r.isCurrentlyOversold);
+  }).map(r => {
+    const metrics = getMetrics(r);
+    const reasons: string[] = [];
+    if (metrics.totalSignals < minSignals) reasons.push(`${metrics.totalSignals} signals (need ${minSignals})`);
+    if (metrics.winRateAt1_5Pct < minWinRate) reasons.push(`${metrics.winRateAt1_5Pct.toFixed(0)}% win rate (need ${minWinRate}%)`);
+    if (showOnlyOversold && !r.isCurrentlyOversold) reasons.push('not currently oversold');
+    return { symbol: r.symbol, reasons, metrics };
   });
 
   // Find currently oversold with high win rates
@@ -625,10 +640,32 @@ export default function ScannerPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredResults.length === 0 ? (
+                {filteredResults.length === 0 && filteredOutResults.length > 0 ? (
+                  <>
+                    <tr>
+                      <td colSpan={10} className="text-center py-4 text-gray-500 border-b border-dark-border">
+                        No results match your filters. Here{"'"}s why:
+                      </td>
+                    </tr>
+                    {filteredOutResults.map(({ symbol, reasons, metrics }) => (
+                      <tr key={symbol} className="opacity-60">
+                        <td className="font-medium text-white">{symbol}</td>
+                        <td colSpan={3} className="text-sm text-yellow-400">
+                          Filtered: {reasons.join(', ')}
+                        </td>
+                        <td colSpan={2} className="font-mono text-sm">
+                          {metrics.totalSignals} signals, {metrics.winRateAt1_5Pct.toFixed(0)}% win
+                        </td>
+                        <td colSpan={4} className="text-xs text-gray-500">
+                          Try lowering Min Win Rate to 0% or Min Signals to 1
+                        </td>
+                      </tr>
+                    ))}
+                  </>
+                ) : filteredResults.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="text-center py-8 text-gray-500">
-                      No results match your filters. Try lowering Min Win Rate or Min Signals.
+                      No results. Check if the data source is working.
                     </td>
                   </tr>
                 ) : (
