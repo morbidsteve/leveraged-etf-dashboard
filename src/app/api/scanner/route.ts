@@ -80,7 +80,7 @@ interface ScanResult {
   winsAt2Pct: number;
   winRateAt1_5Pct: number;
   winRateAt2Pct: number;
-  avgBarsTo1_5Pct: number;
+  avgMinsTo1_5Pct: number;
   avgMaxGain: number;
   avgMaxDrawdown: number;
   // Signal quality
@@ -90,13 +90,11 @@ interface ScanResult {
   error?: string;
 }
 
-// Fetch intraday minute data (up to 60 days from Yahoo)
-async function fetchIntradayData(symbol: string): Promise<Candle[] | null> {
+// Fetch 1-minute intraday data for past month (Yahoo allows up to 30 days of 1m data)
+async function fetchMinuteData(symbol: string): Promise<Candle[] | null> {
   try {
-    // Yahoo allows up to 60 days of 1-minute data, or 730 days of 1-hour data
-    // We'll use 5-minute intervals for a good balance of granularity and data range
-    // 5m interval gives us up to 60 days of data
-    const url = `${YAHOO_BASE_URL}/${symbol}?interval=5m&range=60d`;
+    // Yahoo Finance: 1m interval allows up to 30 days of data
+    const url = `${YAHOO_BASE_URL}/${symbol}?interval=1m&range=1mo`;
 
     const response = await fetch(url, {
       headers: {
@@ -176,13 +174,13 @@ function analyzeETF(
   let totalSignals = 0;
   let winsAt1_5Pct = 0;
   let winsAt2Pct = 0;
-  let totalBarsTo1_5Pct = 0;
+  let totalMinsTo1_5Pct = 0;
   let totalMaxGain = 0;
   let totalMaxDrawdown = 0;
 
-  // For 5-minute candles, 1 week = ~5 trading days * 6.5 hours * 12 candles/hour = ~390 candles
-  // But we'll look forward ~500 bars to be safe (about 1 week of trading)
-  const maxLookforward = 500;
+  // For 1-minute candles, 1 trading day = ~390 minutes (6.5 hours)
+  // Look forward 1 trading day
+  const maxLookforward = 390;
 
   for (let i = 0; i < rsiValues.length - maxLookforward; i++) {
     const rsi = rsiValues[i];
@@ -198,11 +196,11 @@ function analyzeETF(
 
       let hit1_5 = false;
       let hit2 = false;
-      let barsTo1_5 = maxLookforward;
+      let minsTo1_5 = maxLookforward;
       let maxGain = 0;
       let maxDrawdown = 0;
 
-      // Look forward to see if target is hit within ~1 week
+      // Look forward to see if target is hit within 1 trading day
       for (let j = 1; j <= maxLookforward && i + offset + j < candles.length; j++) {
         const futureCandle = candles[i + offset + j];
         const highPrice = futureCandle.high;
@@ -217,7 +215,7 @@ function analyzeETF(
 
         if (!hit1_5 && highPrice >= target1_5) {
           hit1_5 = true;
-          barsTo1_5 = j;
+          minsTo1_5 = j;
         }
 
         if (!hit2 && highPrice >= target2) {
@@ -230,7 +228,7 @@ function analyzeETF(
 
       if (hit1_5) winsAt1_5Pct++;
       if (hit2) winsAt2Pct++;
-      totalBarsTo1_5Pct += hit1_5 ? barsTo1_5 : 0;
+      totalMinsTo1_5Pct += hit1_5 ? minsTo1_5 : 0;
       totalMaxGain += maxGain;
       totalMaxDrawdown += maxDrawdown;
     }
@@ -239,12 +237,12 @@ function analyzeETF(
   // Calculate metrics
   const winRateAt1_5Pct = totalSignals > 0 ? (winsAt1_5Pct / totalSignals) * 100 : 0;
   const winRateAt2Pct = totalSignals > 0 ? (winsAt2Pct / totalSignals) * 100 : 0;
-  const avgBarsTo1_5Pct = winsAt1_5Pct > 0 ? totalBarsTo1_5Pct / winsAt1_5Pct : 0;
+  const avgMinsTo1_5Pct = winsAt1_5Pct > 0 ? totalMinsTo1_5Pct / winsAt1_5Pct : 0;
   const avgMaxGain = totalSignals > 0 ? totalMaxGain / totalSignals : 0;
   const avgMaxDrawdown = totalSignals > 0 ? totalMaxDrawdown / totalSignals : 0;
 
   // Calculate signal strength score (0-100)
-  // Based on: win rate, avg gain vs drawdown, number of signals, consistency
+  // Formula: 50% win rate + 30% risk/reward ratio + 20% sample size reliability
   const winRateScore = winRateAt1_5Pct; // 0-100
   const riskRewardScore = avgMaxDrawdown > 0 ? Math.min(100, (avgMaxGain / avgMaxDrawdown) * 50) : 50;
   // Need at least 3 signals to be meaningful, penalize heavily if fewer
@@ -264,7 +262,7 @@ function analyzeETF(
     winsAt2Pct,
     winRateAt1_5Pct,
     winRateAt2Pct,
-    avgBarsTo1_5Pct,
+    avgMinsTo1_5Pct,
     avgMaxGain,
     avgMaxDrawdown,
     signalStrength,
@@ -277,7 +275,6 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const symbolsParam = searchParams.get('symbols');
   // Default to 14-period RSI for intraday (common standard)
-  // But allow override via parameter
   const period = parseInt(searchParams.get('period') || '14');
   const oversold = parseInt(searchParams.get('oversold') || '50');
   const overbought = parseInt(searchParams.get('overbought') || '70');
@@ -293,13 +290,13 @@ export async function GET(request: NextRequest) {
   const results: ScanResult[] = [];
 
   // Process symbols in parallel with rate limiting
-  const batchSize = 3; // Smaller batches to avoid rate limiting with intraday data
+  const batchSize = 3; // Smaller batches to avoid rate limiting with minute data
   for (let i = 0; i < symbols.length; i += batchSize) {
     const batch = symbols.slice(i, i + batchSize);
 
     const batchResults = await Promise.all(
       batch.map(async (symbol) => {
-        const candles = await fetchIntradayData(symbol.toUpperCase());
+        const candles = await fetchMinuteData(symbol.toUpperCase());
 
         if (!candles || candles.length < period + 100) {
           return {
@@ -312,7 +309,7 @@ export async function GET(request: NextRequest) {
             winsAt2Pct: 0,
             winRateAt1_5Pct: 0,
             winRateAt2Pct: 0,
-            avgBarsTo1_5Pct: 0,
+            avgMinsTo1_5Pct: 0,
             avgMaxGain: 0,
             avgMaxDrawdown: 0,
             signalStrength: 0,
@@ -345,6 +342,13 @@ export async function GET(request: NextRequest) {
     rsiConfig,
     results,
     timestamp: new Date().toISOString(),
-    note: 'Using 5-minute candles over 60 days. RSI signals when crossing below threshold, tracking if price gains 1.5%+ within ~1 week.',
+    methodology: {
+      dataSource: '1-minute candles for past 30 days',
+      dataPoints: 'Up to ~11,700 per ETF (390 mins/day × 30 days)',
+      signalTrigger: `RSI(${period}) crosses below ${oversold}`,
+      targetWindow: '1 trading day (390 minutes)',
+      targets: ['1.5% gain', '2% gain'],
+      scoreFormula: '50% win rate + 30% risk/reward + 20% sample size',
+    },
   });
 }
