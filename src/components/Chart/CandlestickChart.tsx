@@ -42,7 +42,7 @@ interface CandlestickChartProps {
   showRSICrossings?: boolean;
   showOversoldCrossings?: boolean;
   showOverboughtCrossings?: boolean;
-  height?: number;
+  height?: number; // If not provided, uses container height
   onCrosshairMove?: (price: number | null, time: Time | null) => void;
 }
 
@@ -166,7 +166,9 @@ export default function CandlestickChart({
   const oversoldLineRef = useRef<ISeriesApi<any> | null>(null);
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(height || 500);
   const [chartReady, setChartReady] = useState(false);
   const [tooltipData, setTooltipData] = useState<{
     visible: boolean;
@@ -183,32 +185,42 @@ export default function CandlestickChart({
     changePercent: number;
   } | null>(null);
 
-  const mainChartHeight = showRSI ? Math.floor(height * 0.7) : height;
-  const rsiChartHeight = showRSI ? Math.floor(height * 0.3) : 0;
+  // Use containerHeight which may come from prop or measured from parent
+  const effectiveHeight = height || containerHeight;
+  const mainChartHeight = showRSI ? Math.floor(effectiveHeight * 0.7) : effectiveHeight;
+  const rsiChartHeight = showRSI ? Math.floor(effectiveHeight * 0.3) : 0;
 
-  // Measure container width
+  // Measure container dimensions
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!wrapperRef.current) return;
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const width = entry.contentRect.width;
+        const { width, height: measuredHeight } = entry.contentRect;
         if (width > 0) {
           setContainerWidth(width);
+        }
+        // Only use measured height if no height prop is provided
+        if (!height && measuredHeight > 0) {
+          setContainerHeight(measuredHeight);
         }
       }
     });
 
-    resizeObserver.observe(chartContainerRef.current);
+    resizeObserver.observe(wrapperRef.current);
 
     // Initial measurement
-    const initialWidth = chartContainerRef.current.clientWidth;
+    const initialWidth = wrapperRef.current.clientWidth;
+    const initialHeight = wrapperRef.current.clientHeight;
     if (initialWidth > 0) {
       setContainerWidth(initialWidth);
     }
+    if (!height && initialHeight > 0) {
+      setContainerHeight(initialHeight);
+    }
 
     return () => resizeObserver.disconnect();
-  }, []);
+  }, [height]);
 
   // Create charts when container has width
   useEffect(() => {
@@ -443,17 +455,23 @@ export default function CandlestickChart({
     };
   }, [containerWidth, mainChartHeight, rsiChartHeight, showRSI, showVolume, onCrosshairMove]);
 
-  // Update chart size when containerWidth changes
+  // Update chart size when dimensions change
   useEffect(() => {
     if (containerWidth === 0) return;
 
     if (chartRef.current) {
-      chartRef.current.applyOptions({ width: containerWidth });
+      chartRef.current.applyOptions({
+        width: containerWidth,
+        height: mainChartHeight,
+      });
     }
     if (rsiChartRef.current) {
-      rsiChartRef.current.applyOptions({ width: containerWidth });
+      rsiChartRef.current.applyOptions({
+        width: containerWidth,
+        height: rsiChartHeight,
+      });
     }
-  }, [containerWidth]);
+  }, [containerWidth, mainChartHeight, rsiChartHeight]);
 
   // Update data when candles change OR when chart becomes ready
   useEffect(() => {
@@ -564,7 +582,7 @@ export default function CandlestickChart({
   }, [candles, rsiConfig, showRSI, showVolume, showTradeMarkers, showRSICrossings, showOversoldCrossings, showOverboughtCrossings, trades, chartReady]);
 
   return (
-    <div className="w-full relative">
+    <div ref={wrapperRef} className="w-full h-full relative">
       <div
         ref={chartContainerRef}
         className="w-full"

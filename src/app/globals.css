@@ -264,3 +264,73 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Mobile-friendly responsive utilities */
+@layer components {
+  /* Mobile card layout for tables */
+  .mobile-card-list {
+    @apply space-y-3;
+  }
+
+  .mobile-card-item {
+    @apply card p-4;
+  }
+
+  .mobile-card-row {
+    @apply flex items-center justify-between py-1;
+  }
+
+  .mobile-card-label {
+    @apply text-xs text-gray-500;
+  }
+
+  .mobile-card-value {
+    @apply font-mono text-sm text-white;
+  }
+
+  /* Improved touch targets for mobile */
+  @media (max-width: 1023px) {
+    .btn {
+      @apply min-h-[44px] min-w-[44px];
+    }
+
+    .input {
+      @apply min-h-[44px] text-base;
+    }
+
+    select.input {
+      @apply min-h-[44px];
+    }
+
+    .nav-link {
+      @apply py-4;
+    }
+  }
+}
+
+/* Responsive table - hide columns on mobile */
+@media (max-width: 768px) {
+  .table-responsive-hide {
+    display: none;
+  }
+}
+
+/* Mobile-friendly form layout */
+@layer utilities {
+  .form-grid-mobile {
+    @apply grid gap-4;
+    grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 640px) {
+    .form-grid-mobile {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .form-grid-mobile {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+}

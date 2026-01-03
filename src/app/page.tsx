@@ -104,18 +104,19 @@ export default function DashboardPage() {
         </div>
         <div className="p-2">
           {candles.length > 0 ? (
-            <CandlestickChart
-              candles={candles}
-              trades={trades.filter((t) => t.ticker === 'TQQQ')}
-              rsiConfig={rsiConfig}
-              showRSI={true}
-              showVolume={true}
-              showTradeMarkers={true}
-              showRSICrossings={true}
-              height={500}
-            />
+            <div className="h-[300px] sm:h-[400px] lg:h-[500px]">
+              <CandlestickChart
+                candles={candles}
+                trades={trades.filter((t) => t.ticker === 'TQQQ')}
+                rsiConfig={rsiConfig}
+                showRSI={true}
+                showVolume={true}
+                showTradeMarkers={true}
+                showRSICrossings={true}
+              />
+            </div>
           ) : (
-            <div className="h-[500px] flex items-center justify-center text-gray-500">
+            <div className="h-[300px] sm:h-[400px] lg:h-[500px] flex items-center justify-center text-gray-500">
               {isLoading ? 'Loading chart data...' : 'No chart data available'}
             </div>
           )}

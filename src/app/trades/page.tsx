@@ -102,9 +102,9 @@ export default function TradesPage() {
 
   return (
     <MainLayout>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Trade History</h1>
-        <Link href="/trades/new" className="btn btn-primary">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Trade History</h1>
+        <Link href="/trades/new" className="btn btn-primary text-center">
           + New Trade
         </Link>
       </div>
@@ -112,13 +112,13 @@ export default function TradesPage() {
       {/* Filters */}
       <div className="card mb-6">
         <div className="card-body">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
               <label className="label">Status</label>
               <select
                 value={filters.status}
                 onChange={(e) => setFilters({ ...filters, status: e.target.value as 'all' | 'open' | 'closed' })}
-                className="input"
+                className="input w-full"
               >
                 <option value="all">All</option>
                 <option value="open">Open</option>
@@ -131,7 +131,7 @@ export default function TradesPage() {
               <select
                 value={filters.outcome}
                 onChange={(e) => setFilters({ ...filters, outcome: e.target.value as 'all' | 'win' | 'loss' })}
-                className="input"
+                className="input w-full"
               >
                 <option value="all">All</option>
                 <option value="win">Winners</option>
@@ -146,11 +146,11 @@ export default function TradesPage() {
                 placeholder="Search..."
                 value={filters.ticker || ''}
                 onChange={(e) => setFilters({ ...filters, ticker: e.target.value || null })}
-                className="input"
+                className="input w-full"
               />
             </div>
 
-            <div className="ml-auto">
+            <div className="flex items-end">
               <button
                 onClick={() => setFilters({
                   dateRange: { start: null, end: null },
@@ -159,17 +159,17 @@ export default function TradesPage() {
                   outcome: 'all',
                   holdDuration: { min: null, max: null },
                 })}
-                className="btn btn-ghost"
+                className="btn btn-ghost w-full"
               >
-                Clear Filters
+                Clear
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Trade Table */}
-      <div className="card">
+      {/* Trade Table - Desktop */}
+      <div className="card hidden md:block">
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
@@ -288,6 +288,102 @@ export default function TradesPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Trade Cards - Mobile */}
+      <div className="md:hidden space-y-4">
+        {filteredTrades.length === 0 ? (
+          <div className="card">
+            <div className="card-body text-center py-8 text-gray-500">
+              No trades found
+            </div>
+          </div>
+        ) : (
+          filteredTrades.map((trade) => {
+            const currentPrice = prices[trade.ticker]?.price;
+            const pnl = trade.status === 'closed'
+              ? trade.realizedPnL
+              : currentPrice
+                ? (currentPrice - trade.avgCost) * trade.totalShares
+                : 0;
+            const isProfit = pnl >= 0;
+            const holdTime = calculateHoldTime(trade);
+
+            return (
+              <div key={trade.id} className="card">
+                <div className="p-4 space-y-3">
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold text-white">{trade.ticker}</span>
+                      <span className={`badge ${trade.status === 'open' ? 'badge-neutral' : 'bg-gray-700 text-gray-300'}`}>
+                        {trade.status}
+                      </span>
+                    </div>
+                    <div className={`text-right ${isProfit ? 'text-profit' : 'text-loss'}`}>
+                      <div className="font-mono font-bold">{formatCurrency(pnl)}</div>
+                      {trade.avgCost > 0 && (
+                        <div className="text-xs">
+                          {formatPercent((pnl / (trade.avgCost * trade.totalShares)) * 100)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Details */}
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-xs text-gray-500">Shares</div>
+                      <div className="font-mono text-white">{formatShares(trade.totalShares)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Avg Cost</div>
+                      <div className="font-mono text-white">{formatPrice(trade.avgCost)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">{trade.status === 'closed' ? 'Exit Price' : 'Current'}</div>
+                      <div className="font-mono text-white">
+                        {trade.status === 'closed'
+                          ? trade.exits.length > 0
+                            ? formatPrice(trade.exits.reduce((sum, e) => sum + e.price * e.shares, 0) / trade.exits.reduce((sum, e) => sum + e.shares, 0))
+                            : '--'
+                          : currentPrice
+                            ? formatPrice(currentPrice)
+                            : '--'
+                        }
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Hold Time</div>
+                      <div className="text-gray-400">{formatHoldTime(holdTime)}</div>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between pt-3 border-t border-dark-border">
+                    <div className="text-xs text-gray-500">
+                      {format(new Date(trade.createdAt), 'MMM dd, yyyy HH:mm')}
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Link
+                        href={`/trades/${trade.id}`}
+                        className="text-blue-400 hover:text-blue-300 text-sm"
+                      >
+                        View
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(trade.id)}
+                        className="text-loss hover:text-loss-light text-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Summary */}

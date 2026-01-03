@@ -79,67 +79,103 @@ const navItems = [
   },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 bg-dark-card border-r border-dark-border flex flex-col h-screen fixed left-0 top-0">
-      {/* Logo */}
-      <div className="p-4 border-b border-dark-border">
-        <h1 className="text-xl font-bold text-white">
-          <span className="text-profit">TQQQ</span> Trader
-        </h1>
-        <p className="text-xs text-gray-500 mt-1">Leveraged ETF Dashboard</p>
-      </div>
+    <>
+      {/* Mobile overlay */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
 
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href ||
-            (item.href !== '/' && pathname.startsWith(item.href));
+      {/* Sidebar */}
+      <aside
+        className={`
+          w-64 bg-dark-card border-r border-dark-border flex flex-col h-screen fixed left-0 top-0 z-50
+          transform transition-transform duration-300 ease-in-out
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:translate-x-0
+        `}
+      >
+        {/* Logo */}
+        <div className="p-4 border-b border-dark-border flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-white">
+              <span className="text-profit">TQQQ</span> Trader
+            </h1>
+            <p className="text-xs text-gray-500 mt-1">Leveraged ETF Dashboard</p>
+          </div>
+          {/* Mobile close button */}
+          <button
+            onClick={onClose}
+            className="lg:hidden p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg transition-colors"
+            aria-label="Close menu"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`nav-link ${isActive ? 'active' : ''}`}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href ||
+              (item.href !== '/' && pathname.startsWith(item.href));
 
-      {/* Keyboard shortcuts hint */}
-      <div className="p-4 border-t border-dark-border">
-        <p className="text-xs text-gray-500 mb-2">Keyboard Shortcuts</p>
-        <div className="space-y-1 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">New Trade</span>
-            <kbd className="kbd">N</kbd>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Calculator</span>
-            <kbd className="kbd">C</kbd>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Refresh</span>
-            <kbd className="kbd">R</kbd>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Search</span>
-            <kbd className="kbd">/</kbd>
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={`nav-link ${isActive ? 'active' : ''}`}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Keyboard shortcuts hint - hidden on mobile */}
+        <div className="p-4 border-t border-dark-border hidden lg:block">
+          <p className="text-xs text-gray-500 mb-2">Keyboard Shortcuts</p>
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400">New Trade</span>
+              <kbd className="kbd">N</kbd>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400">Calculator</span>
+              <kbd className="kbd">C</kbd>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400">Refresh</span>
+              <kbd className="kbd">R</kbd>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400">Search</span>
+              <kbd className="kbd">/</kbd>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Disclaimer */}
-      <div className="p-4 border-t border-dark-border">
-        <p className="text-[10px] text-gray-600 leading-tight">
-          For personal tracking only. Not financial advice. Leveraged ETFs carry significant risk.
-        </p>
-      </div>
-    </aside>
+        {/* Disclaimer */}
+        <div className="p-4 border-t border-dark-border">
+          <p className="text-[10px] text-gray-600 leading-tight">
+            For personal tracking only. Not financial advice. Leveraged ETFs carry significant risk.
+          </p>
+        </div>
+      </aside>
+    </>
   );
 }
