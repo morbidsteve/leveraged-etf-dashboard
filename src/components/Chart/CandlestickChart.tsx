@@ -47,15 +47,44 @@ export default function CandlestickChart({
   const overboughtLineRef = useRef<ISeriesApi<any> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const oversoldLineRef = useRef<ISeriesApi<any> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [containerWidth, setContainerWidth] = useState(0);
 
+  const mainChartHeight = showRSI ? Math.floor(height * 0.7) : height;
+  const rsiChartHeight = showRSI ? Math.floor(height * 0.3) : 0;
+
+  // Measure container width
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width;
+        if (width > 0) {
+          setContainerWidth(width);
+        }
+      }
+    });
+
+    resizeObserver.observe(chartContainerRef.current);
+
+    // Initial measurement
+    const initialWidth = chartContainerRef.current.clientWidth;
+    if (initialWidth > 0) {
+      setContainerWidth(initialWidth);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  // Create charts when container has width
+  useEffect(() => {
+    if (containerWidth === 0 || !chartContainerRef.current) return;
+    if (chartRef.current) return; // Already created
+
     // Create main chart
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: showRSI ? Math.floor(height * 0.7) : height,
+      width: containerWidth,
+      height: mainChartHeight,
       layout: {
         background: { color: '#1a1a1a' },
         textColor: '#9ca3af',
@@ -98,7 +127,7 @@ export default function CandlestickChart({
 
     chartRef.current = chart;
 
-    // Add candlestick series (v5 API)
+    // Add candlestick series
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
@@ -145,8 +174,8 @@ export default function CandlestickChart({
     // Create RSI chart if enabled
     if (showRSI && rsiContainerRef.current) {
       const rsiChart = createChart(rsiContainerRef.current, {
-        width: rsiContainerRef.current.clientWidth,
-        height: Math.floor(height * 0.3),
+        width: containerWidth,
+        height: rsiChartHeight,
         layout: {
           background: { color: '#1a1a1a' },
           textColor: '#9ca3af',
@@ -175,7 +204,6 @@ export default function CandlestickChart({
         priceScaleId: 'right',
       });
 
-      // Add overbought/oversold lines
       const overboughtLine = rsiChart.addSeries(LineSeries, {
         color: '#ef4444',
         lineWidth: 1,
@@ -194,7 +222,6 @@ export default function CandlestickChart({
       overboughtLineRef.current = overboughtLine;
       oversoldLineRef.current = oversoldLine;
 
-      // Set RSI scale
       rsiChart.priceScale('right').applyOptions({
         scaleMargins: {
           top: 0.1,
@@ -211,31 +238,30 @@ export default function CandlestickChart({
       });
     }
 
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-        });
-      }
-      if (rsiContainerRef.current && rsiChartRef.current) {
-        rsiChartRef.current.applyOptions({
-          width: rsiContainerRef.current.clientWidth,
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
-
-    setIsLoading(false);
-
     return () => {
-      window.removeEventListener('resize', handleResize);
       chart.remove();
       rsiChartRef.current?.remove();
+      chartRef.current = null;
+      rsiChartRef.current = null;
+      candlestickSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+      rsiSeriesRef.current = null;
+      overboughtLineRef.current = null;
+      oversoldLineRef.current = null;
     };
-  }, [showRSI, showVolume, onCrosshairMove, height]);
+  }, [containerWidth, mainChartHeight, rsiChartHeight, showRSI, showVolume, onCrosshairMove]);
+
+  // Update chart size when containerWidth changes
+  useEffect(() => {
+    if (containerWidth === 0) return;
+
+    if (chartRef.current) {
+      chartRef.current.applyOptions({ width: containerWidth });
+    }
+    if (rsiChartRef.current) {
+      rsiChartRef.current.applyOptions({ width: containerWidth });
+    }
+  }, [containerWidth]);
 
   // Update data when candles change
   useEffect(() => {
@@ -274,7 +300,6 @@ export default function CandlestickChart({
 
         rsiSeriesRef.current.setData(rsiLineData);
 
-        // Update threshold lines
         if (overboughtLineRef.current) {
           overboughtLineRef.current.setData(
             rsiData.map((point) => ({
@@ -299,20 +324,12 @@ export default function CandlestickChart({
     chartRef.current?.timeScale().fitContent();
   }, [candles, rsiConfig, showRSI, showVolume]);
 
-  const mainChartHeight = showRSI ? Math.floor(height * 0.7) : height;
-  const rsiChartHeight = showRSI ? Math.floor(height * 0.3) : 0;
-
   return (
     <div className="w-full">
-      {isLoading && (
-        <div className="flex items-center justify-center h-[500px] text-gray-500">
-          <span className="animate-pulse">Loading chart...</span>
-        </div>
-      )}
       <div
         ref={chartContainerRef}
         className="w-full"
-        style={{ height: mainChartHeight, display: isLoading ? 'none' : 'block' }}
+        style={{ height: mainChartHeight }}
       />
       {showRSI && (
         <div className="mt-1">
@@ -320,7 +337,7 @@ export default function CandlestickChart({
           <div
             ref={rsiContainerRef}
             className="w-full"
-            style={{ height: rsiChartHeight, display: isLoading ? 'none' : 'block' }}
+            style={{ height: rsiChartHeight }}
           />
         </div>
       )}
