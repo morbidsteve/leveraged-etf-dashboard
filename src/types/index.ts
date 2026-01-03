@@ -32,12 +32,16 @@ export interface Trade {
 // Portfolio types
 export interface PortfolioSummary {
   totalTrades: number;
+  openTrades: number;
+  closedTrades: number;
   winningTrades: number;
   losingTrades: number;
   winRate: number;
   avgReturnPercent: number;
   avgHoldTimeHours: number;
   totalProfit: number;
+  unrealizedPnL: number;
+  totalInvested: number;
   bestTrade: Trade | null;
   worstTrade: Trade | null;
   currentStreak: number;

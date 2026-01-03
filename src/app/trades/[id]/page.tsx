@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/Layout';
-import { useTradeStore, usePriceStore } from '@/store';
+import { useTradeStore } from '@/store';
 import { usePriceData } from '@/hooks/usePriceData';
 import {
   formatCurrency,
@@ -13,8 +13,12 @@ import {
   formatHoldTime,
   calculateHoldTime,
   getOpenPosition,
+  calculateAvgCost,
+  calculateTotalShares,
+  calculateRealizedPnL,
 } from '@/lib/calculations';
 import { format } from 'date-fns';
+import { TradeEntry, TradeExit } from '@/types';
 
 export default function TradeDetailPage() {
   const router = useRouter();
@@ -31,8 +35,25 @@ export default function TradeDetailPage() {
   const [showAddExit, setShowAddExit] = useState(false);
   const [newPrice, setNewPrice] = useState(0);
   const [newShares, setNewShares] = useState(0);
+  const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 16));
   const [editNotes, setEditNotes] = useState(false);
   const [notes, setNotes] = useState('');
+
+  // Edit mode states
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editingExitId, setEditingExitId] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState(0);
+  const [editShares, setEditShares] = useState(0);
+  const [editDate, setEditDate] = useState('');
+  const [editTicker, setEditTicker] = useState(false);
+  const [ticker, setTicker] = useState('');
+
+  // Initialize ticker from trade
+  useEffect(() => {
+    if (trade) {
+      setTicker(trade.ticker);
+    }
+  }, [trade]);
 
   const { priceData } = usePriceData({
     ticker: trade?.ticker || 'TQQQ',
@@ -61,12 +82,13 @@ export default function TradeDetailPage() {
     e.preventDefault();
     if (newPrice > 0 && newShares > 0) {
       addEntry(tradeId, {
-        date: new Date(),
+        date: new Date(newDate),
         price: newPrice,
         shares: newShares,
       });
       setNewPrice(0);
       setNewShares(0);
+      setNewDate(new Date().toISOString().slice(0, 16));
       setShowAddEntry(false);
     }
   };
@@ -75,12 +97,13 @@ export default function TradeDetailPage() {
     e.preventDefault();
     if (newPrice > 0 && newShares > 0 && newShares <= trade.totalShares) {
       addExit(tradeId, {
-        date: new Date(),
+        date: new Date(newDate),
         price: newPrice,
         shares: newShares,
       });
       setNewPrice(0);
       setNewShares(0);
+      setNewDate(new Date().toISOString().slice(0, 16));
       setShowAddExit(false);
     }
   };
@@ -97,6 +120,122 @@ export default function TradeDetailPage() {
     }
   };
 
+  const handleUpdateTicker = () => {
+    if (ticker.trim()) {
+      updateTrade(tradeId, { ticker: ticker.toUpperCase() });
+      setEditTicker(false);
+    }
+  };
+
+  const startEditEntry = (entry: TradeEntry) => {
+    setEditingEntryId(entry.id);
+    setEditPrice(entry.price);
+    setEditShares(entry.shares);
+    setEditDate(new Date(entry.date).toISOString().slice(0, 16));
+  };
+
+  const handleUpdateEntry = () => {
+    if (!editingEntryId || !trade) return;
+
+    const updatedEntries = trade.entries.map((e) =>
+      e.id === editingEntryId
+        ? { ...e, price: editPrice, shares: editShares, date: new Date(editDate) }
+        : e
+    );
+
+    const avgCost = calculateAvgCost(updatedEntries);
+    const totalShares = updatedEntries.reduce((sum, e) => sum + e.shares, 0) -
+      trade.exits.reduce((sum, e) => sum + e.shares, 0);
+
+    updateTrade(tradeId, {
+      entries: updatedEntries,
+      avgCost,
+      totalShares,
+    });
+    setEditingEntryId(null);
+  };
+
+  const handleDeleteEntry = (entryId: string) => {
+    if (!trade || trade.entries.length <= 1) {
+      alert('Cannot delete the only entry. Delete the trade instead.');
+      return;
+    }
+    if (confirm('Delete this entry?')) {
+      const updatedEntries = trade.entries.filter((e) => e.id !== entryId);
+      const avgCost = calculateAvgCost(updatedEntries);
+      const totalShares = updatedEntries.reduce((sum, e) => sum + e.shares, 0) -
+        trade.exits.reduce((sum, e) => sum + e.shares, 0);
+
+      updateTrade(tradeId, {
+        entries: updatedEntries,
+        avgCost,
+        totalShares,
+      });
+    }
+  };
+
+  const startEditExit = (exit: TradeExit) => {
+    setEditingExitId(exit.id);
+    setEditPrice(exit.price);
+    setEditShares(exit.shares);
+    setEditDate(new Date(exit.date).toISOString().slice(0, 16));
+  };
+
+  const handleUpdateExit = () => {
+    if (!editingExitId || !trade) return;
+
+    const updatedExits = trade.exits.map((e) =>
+      e.id === editingExitId
+        ? { ...e, price: editPrice, shares: editShares, date: new Date(editDate) }
+        : e
+    );
+
+    const totalShares = trade.entries.reduce((sum, e) => sum + e.shares, 0) -
+      updatedExits.reduce((sum, e) => sum + e.shares, 0);
+    const updatedTrade = { ...trade, exits: updatedExits, totalShares };
+    const realizedPnL = calculateRealizedPnL(updatedTrade);
+
+    // Auto-close if no shares remaining
+    const isClosed = totalShares <= 0;
+
+    updateTrade(tradeId, {
+      exits: updatedExits,
+      totalShares,
+      realizedPnL,
+      status: isClosed ? 'closed' : trade.status,
+      closedAt: isClosed && !trade.closedAt ? new Date() : trade.closedAt,
+    });
+    setEditingExitId(null);
+  };
+
+  const handleDeleteExit = (exitId: string) => {
+    if (!trade) return;
+    if (confirm('Delete this exit?')) {
+      const updatedExits = trade.exits.filter((e) => e.id !== exitId);
+      const totalShares = trade.entries.reduce((sum, e) => sum + e.shares, 0) -
+        updatedExits.reduce((sum, e) => sum + e.shares, 0);
+      const updatedTrade = { ...trade, exits: updatedExits, totalShares };
+      const realizedPnL = calculateRealizedPnL(updatedTrade);
+
+      updateTrade(tradeId, {
+        exits: updatedExits,
+        totalShares,
+        realizedPnL,
+        status: 'open', // Reopen if exits are deleted
+        closedAt: undefined,
+      });
+    }
+  };
+
+  const handleReopenTrade = () => {
+    if (confirm('Reopen this trade?')) {
+      updateTrade(tradeId, {
+        status: 'open',
+        closedAt: undefined,
+      });
+    }
+  };
+
   return (
     <MainLayout>
       <div className="max-w-4xl mx-auto">
@@ -104,13 +243,38 @@ export default function TradeDetailPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-white">{trade.ticker}</h1>
+              {editTicker ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={ticker}
+                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                    className="input w-32 font-mono uppercase text-xl font-bold"
+                  />
+                  <button onClick={handleUpdateTicker} className="btn btn-primary btn-sm">Save</button>
+                  <button onClick={() => { setEditTicker(false); setTicker(trade.ticker); }} className="btn btn-ghost btn-sm">Cancel</button>
+                </div>
+              ) : (
+                <h1
+                  className="text-2xl font-bold text-white cursor-pointer hover:text-blue-400"
+                  onClick={() => setEditTicker(true)}
+                  title="Click to edit ticker"
+                >
+                  {trade.ticker}
+                </h1>
+              )}
               <span className={`badge ${trade.status === 'open' ? 'badge-neutral' : 'bg-gray-700 text-gray-300'}`}>
                 {trade.status}
               </span>
+              {trade.status === 'closed' && (
+                <button onClick={handleReopenTrade} className="text-xs text-blue-400 hover:text-blue-300">
+                  Reopen
+                </button>
+              )}
             </div>
             <p className="text-sm text-gray-500 mt-1">
               Opened {format(new Date(trade.createdAt), 'MMM dd, yyyy HH:mm')}
+              {trade.closedAt && ` | Closed ${format(new Date(trade.closedAt), 'MMM dd, yyyy HH:mm')}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -269,17 +433,63 @@ export default function TradeDetailPage() {
                   <th>Price</th>
                   <th>Shares</th>
                   <th>Cost</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {trade.entries.map((entry) => (
                   <tr key={entry.id}>
-                    <td className="font-mono text-sm">
-                      {format(new Date(entry.date), 'MMM dd, yyyy HH:mm')}
-                    </td>
-                    <td className="font-mono">{formatPrice(entry.price)}</td>
-                    <td className="font-mono">{formatShares(entry.shares)}</td>
-                    <td className="font-mono">{formatCurrency(entry.price * entry.shares)}</td>
+                    {editingEntryId === entry.id ? (
+                      <>
+                        <td>
+                          <input
+                            type="datetime-local"
+                            value={editDate}
+                            onChange={(e) => setEditDate(e.target.value)}
+                            className="input text-sm w-44"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editPrice}
+                            onChange={(e) => setEditPrice(Number(e.target.value))}
+                            className="input font-mono w-24"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            value={editShares}
+                            onChange={(e) => setEditShares(Number(e.target.value))}
+                            className="input font-mono w-20"
+                          />
+                        </td>
+                        <td className="font-mono">{formatCurrency(editPrice * editShares)}</td>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <button onClick={handleUpdateEntry} className="text-profit hover:text-profit-light text-sm">Save</button>
+                            <button onClick={() => setEditingEntryId(null)} className="text-gray-400 hover:text-white text-sm">Cancel</button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="font-mono text-sm">
+                          {format(new Date(entry.date), 'MMM dd, yyyy HH:mm')}
+                        </td>
+                        <td className="font-mono">{formatPrice(entry.price)}</td>
+                        <td className="font-mono">{formatShares(entry.shares)}</td>
+                        <td className="font-mono">{formatCurrency(entry.price * entry.shares)}</td>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => startEditEntry(entry)} className="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
+                            <button onClick={() => handleDeleteEntry(entry.id)} className="text-loss hover:text-loss-light text-sm">Delete</button>
+                          </div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -289,8 +499,8 @@ export default function TradeDetailPage() {
           {/* Add Entry Form */}
           {showAddEntry && (
             <form onSubmit={handleAddEntry} className="p-4 border-t border-dark-border">
-              <div className="flex items-end gap-4">
-                <div className="flex-1">
+              <div className="flex items-end gap-4 flex-wrap">
+                <div className="flex-1 min-w-[120px]">
                   <label className="label">Price</label>
                   <div className="flex items-center gap-2">
                     <input
@@ -313,7 +523,7 @@ export default function TradeDetailPage() {
                     )}
                   </div>
                 </div>
-                <div className="w-32">
+                <div className="w-24">
                   <label className="label">Shares</label>
                   <input
                     type="number"
@@ -322,6 +532,15 @@ export default function TradeDetailPage() {
                     className="input w-full font-mono"
                     placeholder="0"
                     required
+                  />
+                </div>
+                <div className="w-44">
+                  <label className="label">Date/Time</label>
+                  <input
+                    type="datetime-local"
+                    value={newDate}
+                    onChange={(e) => setNewDate(e.target.value)}
+                    className="input w-full text-sm"
                   />
                 </div>
                 <button type="submit" className="btn btn-primary">
@@ -357,17 +576,63 @@ export default function TradeDetailPage() {
                     <th>Price</th>
                     <th>Shares</th>
                     <th>Proceeds</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {trade.exits.map((exit) => (
                     <tr key={exit.id}>
-                      <td className="font-mono text-sm">
-                        {format(new Date(exit.date), 'MMM dd, yyyy HH:mm')}
-                      </td>
-                      <td className="font-mono">{formatPrice(exit.price)}</td>
-                      <td className="font-mono">{formatShares(exit.shares)}</td>
-                      <td className="font-mono">{formatCurrency(exit.price * exit.shares)}</td>
+                      {editingExitId === exit.id ? (
+                        <>
+                          <td>
+                            <input
+                              type="datetime-local"
+                              value={editDate}
+                              onChange={(e) => setEditDate(e.target.value)}
+                              className="input text-sm w-44"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editPrice}
+                              onChange={(e) => setEditPrice(Number(e.target.value))}
+                              className="input font-mono w-24"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              value={editShares}
+                              onChange={(e) => setEditShares(Number(e.target.value))}
+                              className="input font-mono w-20"
+                            />
+                          </td>
+                          <td className="font-mono">{formatCurrency(editPrice * editShares)}</td>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <button onClick={handleUpdateExit} className="text-profit hover:text-profit-light text-sm">Save</button>
+                              <button onClick={() => setEditingExitId(null)} className="text-gray-400 hover:text-white text-sm">Cancel</button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="font-mono text-sm">
+                            {format(new Date(exit.date), 'MMM dd, yyyy HH:mm')}
+                          </td>
+                          <td className="font-mono">{formatPrice(exit.price)}</td>
+                          <td className="font-mono">{formatShares(exit.shares)}</td>
+                          <td className="font-mono">{formatCurrency(exit.price * exit.shares)}</td>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => startEditExit(exit)} className="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
+                              <button onClick={() => handleDeleteExit(exit.id)} className="text-loss hover:text-loss-light text-sm">Delete</button>
+                            </div>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -382,8 +647,8 @@ export default function TradeDetailPage() {
           {/* Add Exit Form */}
           {showAddExit && (
             <form onSubmit={handleAddExit} className="p-4 border-t border-dark-border">
-              <div className="flex items-end gap-4">
-                <div className="flex-1">
+              <div className="flex items-end gap-4 flex-wrap">
+                <div className="flex-1 min-w-[120px]">
                   <label className="label">Price</label>
                   <div className="flex items-center gap-2">
                     <input
@@ -406,7 +671,7 @@ export default function TradeDetailPage() {
                     )}
                   </div>
                 </div>
-                <div className="w-32">
+                <div className="w-24">
                   <label className="label">Shares (max: {trade.totalShares})</label>
                   <input
                     type="number"
@@ -416,6 +681,15 @@ export default function TradeDetailPage() {
                     className="input w-full font-mono"
                     placeholder="0"
                     required
+                  />
+                </div>
+                <div className="w-44">
+                  <label className="label">Date/Time</label>
+                  <input
+                    type="datetime-local"
+                    value={newDate}
+                    onChange={(e) => setNewDate(e.target.value)}
+                    className="input w-full text-sm"
                   />
                 </div>
                 <button type="submit" className="btn btn-success">

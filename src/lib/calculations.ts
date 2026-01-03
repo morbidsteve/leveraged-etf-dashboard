@@ -181,17 +181,30 @@ export function isWinningTrade(trade: Trade): boolean {
  * Calculate portfolio summary from trades
  */
 export function calculatePortfolioSummary(trades: Trade[]): PortfolioSummary {
+  const openTrades = trades.filter(t => t.status === 'open');
   const closedTrades = trades.filter(t => t.status === 'closed');
 
-  if (closedTrades.length === 0) {
+  // Calculate open position values
+  const totalInvested = openTrades.reduce((sum, t) => {
+    return sum + t.entries.reduce((s, e) => s + e.price * e.shares, 0);
+  }, 0);
+
+  // Note: unrealizedPnL will be calculated with current prices in the component
+  const unrealizedPnL = openTrades.reduce((sum, t) => sum + t.unrealizedPnL, 0);
+
+  if (trades.length === 0) {
     return {
       totalTrades: 0,
+      openTrades: 0,
+      closedTrades: 0,
       winningTrades: 0,
       losingTrades: 0,
       winRate: 0,
       avgReturnPercent: 0,
       avgHoldTimeHours: 0,
       totalProfit: 0,
+      unrealizedPnL: 0,
+      totalInvested: 0,
       bestTrade: null,
       worstTrade: null,
       currentStreak: 0,
@@ -203,7 +216,9 @@ export function calculatePortfolioSummary(trades: Trade[]): PortfolioSummary {
   const losers = closedTrades.filter(t => !isWinningTrade(t));
 
   const totalProfit = closedTrades.reduce((sum, t) => sum + t.realizedPnL, 0);
-  const totalHoldTime = closedTrades.reduce((sum, t) => sum + calculateHoldTime(t), 0);
+  const totalHoldTime = closedTrades.length > 0
+    ? closedTrades.reduce((sum, t) => sum + calculateHoldTime(t), 0)
+    : 0;
 
   // Calculate average return percentage
   const returns = closedTrades.map(t => {
@@ -248,13 +263,17 @@ export function calculatePortfolioSummary(trades: Trade[]): PortfolioSummary {
   }
 
   return {
-    totalTrades: closedTrades.length,
+    totalTrades: trades.length,
+    openTrades: openTrades.length,
+    closedTrades: closedTrades.length,
     winningTrades: winners.length,
     losingTrades: losers.length,
-    winRate: (winners.length / closedTrades.length) * 100,
+    winRate: closedTrades.length > 0 ? (winners.length / closedTrades.length) * 100 : 0,
     avgReturnPercent,
-    avgHoldTimeHours: totalHoldTime / closedTrades.length,
+    avgHoldTimeHours: closedTrades.length > 0 ? totalHoldTime / closedTrades.length : 0,
     totalProfit,
+    unrealizedPnL,
+    totalInvested,
     bestTrade,
     worstTrade,
     currentStreak,
