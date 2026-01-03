@@ -270,7 +270,7 @@ async function fetchFinnhubCandles(
 }
 
 // Analyze a single timeframe and return metrics
-// Now counts ALL instances where RSI is below threshold (not just crossings)
+// Counts ALL instances where RSI is below threshold
 function analyzeTimeframe(
   candles: Candle[],
   rsiConfig: RSIConfig,
@@ -287,20 +287,16 @@ function analyzeTimeframe(
   let totalMaxGain = 0;
   let totalMaxDrawdown = 0;
 
-  // Look forward 1 trading day
+  // Look forward 1 trading day for performance measurement
   const maxLookforward = barsPerDay;
 
-  // To avoid counting overlapping signals, skip bars that are within lookforward of previous signal
-  let lastSignalIndex = -maxLookforward;
-
-  for (let i = 0; i < rsiValues.length - maxLookforward; i++) {
+  for (let i = 1; i < rsiValues.length - maxLookforward; i++) {
     const rsi = rsiValues[i];
+    const prevRsi = rsiValues[i - 1];
 
-    // Signal: RSI is below oversold threshold
-    // Only count if we're far enough from the last signal to avoid overlap
-    if (rsi < rsiConfig.oversold && (i - lastSignalIndex) >= maxLookforward) {
+    // Signal: RSI drops below oversold threshold (crosses from above to below)
+    if (rsi < rsiConfig.oversold && prevRsi >= rsiConfig.oversold) {
       totalSignals++;
-      lastSignalIndex = i;
 
       const entryPrice = candles[i + offset].close;
       const target1_5 = entryPrice * 1.015;
