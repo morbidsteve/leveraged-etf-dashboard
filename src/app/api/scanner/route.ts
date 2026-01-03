@@ -287,8 +287,8 @@ function analyzeTimeframe(
   let totalMaxGain = 0;
   let totalMaxDrawdown = 0;
 
-  // Look forward 1 trading day for performance measurement
-  const maxLookforward = barsPerDay;
+  // Look forward 1 week (5 trading days) for performance measurement
+  const maxLookforward = barsPerDay * 5;
 
   for (let i = 1; i < rsiValues.length - maxLookforward; i++) {
     const rsi = rsiValues[i];
@@ -526,15 +526,15 @@ export async function GET(request: NextRequest) {
       shortTerm: {
         dataSource: `1-minute candles for past 7 days (${dataSourceLabel})`,
         dataPoints: 'Up to ~2,500 per ETF (390 bars/day × 7 days)',
-        targetWindow: '1 trading day (390 minutes)',
+        targetWindow: '1 week (5 trading days)',
       },
       longTerm: {
         dataSource: `5-minute candles for past 60 days (${dataSourceLabel})`,
         dataPoints: 'Up to ~4,600 per ETF (78 bars/day × 60 days)',
-        targetWindow: '1 trading day (390 minutes)',
+        targetWindow: '1 week (5 trading days)',
       },
-      signalTrigger: `RSI(${period}) crosses below ${oversold}`,
-      targets: ['1.5% gain', '2% gain'],
+      signalTrigger: `RSI(${period}) drops below ${oversold} (crosses from above to below)`,
+      targets: ['1.5% gain within 1 week', '2% gain within 1 week'],
       scoreFormula: 'Combined: 60% short-term + 40% long-term',
     },
   });

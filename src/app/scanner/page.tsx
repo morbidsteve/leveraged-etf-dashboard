@@ -267,8 +267,8 @@ function ExpandedDetail({ result, oversold }: { result: ScanResult; oversold: nu
           <div className="mt-4 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5">
             <h4 className="font-medium text-yellow-400 mb-2">How to Read This Data</h4>
             <ul className="text-sm text-gray-400 space-y-1">
-              <li><strong className="text-white">Signals:</strong> Each time RSI dropped below {oversold}, we tracked what happened over the next 390 minutes (1 trading day)</li>
-              <li><strong className="text-white">Win Rate:</strong> What % of those signals resulted in price hitting +1.5% or +2% from the signal point</li>
+              <li><strong className="text-white">Signals:</strong> Each time RSI dropped below {oversold} (crossed from above), we tracked what happened over the next week</li>
+              <li><strong className="text-white">Win Rate:</strong> What % of those signals resulted in price hitting +1.5% or +2% within 1 week</li>
               <li><strong className="text-white">Avg Time:</strong> How long it typically takes to hit the target when successful</li>
               <li><strong className="text-white">Max Gain/Drawdown:</strong> The best and worst points reached, helping you set stops and targets</li>
               <li><strong className="text-white">Consistent = Good:</strong> Look for ETFs where <span className="text-profit">both</span> timeframes show high win rates. This confirms the pattern is reliable.</li>
@@ -438,7 +438,7 @@ export default function ScannerPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">ETF Scanner</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Find ETFs where RSI drops below {oversold} and price gains 1.5%+ within 1 day
+            Find ETFs where RSI drops below {oversold} and price gains 1.5%+ within 1 week
           </p>
         </div>
         <button
@@ -488,7 +488,7 @@ export default function ScannerPage() {
             <div>
               <label className="label flex items-center gap-1">
                 Oversold Threshold
-                <Tooltip text="RSI value that triggers a buy signal. When RSI crosses below this, we check if price gains 1.5%+ within 1 day.">
+                <Tooltip text="RSI value that triggers a buy signal. When RSI crosses below this, we check if price gains 1.5%+ within 1 week.">
                   <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -506,7 +506,7 @@ export default function ScannerPage() {
             <div>
               <label className="label flex items-center gap-1">
                 Min Win Rate %
-                <Tooltip text="Only show ETFs where at least this % of signals hit the 1.5% target within 1 day.">
+                <Tooltip text="Only show ETFs where at least this % of signals hit the 1.5% target within 1 week.">
                   <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -662,7 +662,7 @@ export default function ScannerPage() {
           </div>
           <div className="card-body">
             <p className="text-sm text-gray-400 mb-4">
-              These ETFs are <strong className="text-white">currently</strong> below RSI {oversold} and have historically gained 1.5%+ within 1 day.
+              These ETFs are <strong className="text-white">currently</strong> below RSI {oversold} and have historically gained 1.5%+ within 1 week.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {hotOpportunities.map((result) => (
@@ -745,11 +745,11 @@ export default function ScannerPage() {
                   </div>
                   <div className="flex gap-2">
                     <span className="text-profit font-bold">3.</span>
-                    <span><strong className="text-white">Window:</strong> 1 trading day (390 minutes)</span>
+                    <span><strong className="text-white">Window:</strong> 1 week (5 trading days)</span>
                   </div>
                   <div className="flex gap-2">
                     <span className="text-profit font-bold">4.</span>
-                    <span><strong className="text-white">Win Rate:</strong> % of signals that hit target</span>
+                    <span><strong className="text-white">Win Rate:</strong> % of signals that hit target within 1 week</span>
                   </div>
                 </div>
               </div>
@@ -780,14 +780,14 @@ export default function ScannerPage() {
               <div className="p-3 bg-dark-bg rounded-lg">
                 <h4 className="font-medium text-white mb-1">Signals</h4>
                 <p className="text-gray-400">
-                  Number of times RSI dropped below {oversold}. Each signal is a potential entry point, spaced at least 1 day apart to avoid overlap.
+                  Number of times RSI dropped below {oversold} (crossed from above to below). Each crossing is a potential entry point.
                 </p>
               </div>
 
               <div className="p-3 bg-dark-bg rounded-lg">
                 <h4 className="font-medium text-white mb-1">Win Rate @ 1.5% / 2%</h4>
                 <p className="text-gray-400">
-                  Percentage of signals where price hit +1.5% or +2% within 1 trading day. Higher = more reliable pattern.
+                  Percentage of signals where price hit +1.5% or +2% within 1 week. Higher = more reliable pattern.
                 </p>
               </div>
 
@@ -888,12 +888,12 @@ export default function ScannerPage() {
                     </Tooltip>
                   </th>
                   <th>
-                    <Tooltip text="% of signals where price hit +1.5% within 1 trading day.">
+                    <Tooltip text="% of signals where price hit +1.5% within 1 week.">
                       <span className="underline decoration-dotted cursor-help">Win (1.5%)</span>
                     </Tooltip>
                   </th>
                   <th>
-                    <Tooltip text="% of signals where price hit +2% within 1 trading day.">
+                    <Tooltip text="% of signals where price hit +2% within 1 week.">
                       <span className="underline decoration-dotted cursor-help">Win (2%)</span>
                     </Tooltip>
                   </th>
@@ -1052,7 +1052,7 @@ export default function ScannerPage() {
             <h3 className="text-lg font-medium text-white mb-2">Find Repeatable RSI Reversal Patterns</h3>
             <p className="text-gray-500 max-w-md mx-auto mb-4">
               This scanner analyzes both short-term (7 days, 1-min bars) and long-term (60 days, 5-min bars) data
-              to find ETFs where RSI dropping below {oversold} consistently leads to 1.5%+ gains within 1 day.
+              to find ETFs where RSI dropping below {oversold} consistently leads to 1.5%+ gains within 1 week.
             </p>
             <div className="text-left max-w-lg mx-auto text-sm text-gray-400 space-y-2">
               <p><strong className="text-white">What you{"'"}re looking for:</strong></p>
