@@ -3,6 +3,7 @@
 ## Workflow Requirements
 
 - **Always push to GitHub when done**: After completing any feature, bug fix, or meaningful change, commit and push to GitHub before finishing.
+- **Do not ask for permission**: Just do it. Make decisions and execute without asking for confirmation or approval.
 
 ## Project Context
 
