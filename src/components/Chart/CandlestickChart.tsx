@@ -40,6 +40,8 @@ interface CandlestickChartProps {
   showVolume?: boolean;
   showTradeMarkers?: boolean;
   showRSICrossings?: boolean;
+  showOversoldCrossings?: boolean;
+  showOverboughtCrossings?: boolean;
   height?: number;
   onCrosshairMove?: (price: number | null, time: Time | null) => void;
 }
@@ -75,10 +77,37 @@ function extractTradeMarkers(trades: Trade[]): TradeMarker[] {
   return markers.sort((a, b) => a.time - b.time);
 }
 
-// Helper to detect RSI threshold crossings
+// Helper to format volume for display
+function formatVolume(volume: number): string {
+  if (volume >= 1_000_000_000) {
+    return (volume / 1_000_000_000).toFixed(2) + 'B';
+  }
+  if (volume >= 1_000_000) {
+    return (volume / 1_000_000).toFixed(2) + 'M';
+  }
+  if (volume >= 1_000) {
+    return (volume / 1_000).toFixed(1) + 'K';
+  }
+  return volume.toFixed(0);
+}
+
+// Helper to get RSI color based on value
+function getRSIColor(rsi: number, config: RSIConfig): string {
+  if (rsi <= config.oversold) {
+    return 'text-profit';
+  }
+  if (rsi >= config.overbought) {
+    return 'text-loss';
+  }
+  return 'text-yellow-400';
+}
+
+// Helper to detect RSI threshold crossings based on config
 function detectRSICrossings(
   rsiData: { time: number; value: number }[],
-  config: RSIConfig
+  config: RSIConfig,
+  showOversoldCrossings: boolean = true,
+  showOverboughtCrossings: boolean = true
 ): RSICrossing[] {
   const crossings: RSICrossing[] = [];
 
@@ -86,8 +115,8 @@ function detectRSICrossings(
     const prev = rsiData[i - 1];
     const curr = rsiData[i];
 
-    // Crossing below oversold (entering oversold zone)
-    if (prev.value >= config.oversold && curr.value < config.oversold) {
+    // Crossing below oversold threshold (entering oversold zone)
+    if (showOversoldCrossings && prev.value >= config.oversold && curr.value < config.oversold) {
       crossings.push({
         time: curr.time,
         type: 'oversold',
@@ -95,8 +124,8 @@ function detectRSICrossings(
       });
     }
 
-    // Crossing above overbought (entering overbought zone)
-    if (prev.value <= config.overbought && curr.value > config.overbought) {
+    // Crossing above overbought threshold (entering overbought zone)
+    if (showOverboughtCrossings && prev.value <= config.overbought && curr.value > config.overbought) {
       crossings.push({
         time: curr.time,
         type: 'overbought',
@@ -116,6 +145,8 @@ export default function CandlestickChart({
   showVolume = true,
   showTradeMarkers = true,
   showRSICrossings = true,
+  showOversoldCrossings = true,
+  showOverboughtCrossings = true,
   height = 500,
   onCrosshairMove,
 }: CandlestickChartProps) {
@@ -134,8 +165,23 @@ export default function CandlestickChart({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const oversoldLineRef = useRef<ISeriesApi<any> | null>(null);
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [chartReady, setChartReady] = useState(false);
+  const [tooltipData, setTooltipData] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    time: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    rsi: number | null;
+    change: number;
+    changePercent: number;
+  } | null>(null);
 
   const mainChartHeight = showRSI ? Math.floor(height * 0.7) : height;
   const rsiChartHeight = showRSI ? Math.floor(height * 0.3) : 0;
@@ -250,7 +296,7 @@ export default function CandlestickChart({
       volumeSeriesRef.current = volumeSeries;
     }
 
-    // Handle crosshair move
+    // Handle crosshair move for tooltip
     chart.subscribeCrosshairMove((param) => {
       if (onCrosshairMove) {
         if (param.time && param.seriesData.size > 0) {
@@ -260,6 +306,56 @@ export default function CandlestickChart({
           onCrosshairMove(null, null);
         }
       }
+
+      // Update tooltip
+      if (!param.time || param.seriesData.size === 0 || !param.point) {
+        setTooltipData(null);
+        return;
+      }
+
+      const candleData = param.seriesData.get(candlestickSeries) as CandlestickData;
+      if (!candleData) {
+        setTooltipData(null);
+        return;
+      }
+
+      // Find volume for this candle
+      const volumeData = volumeSeriesRef.current
+        ? param.seriesData.get(volumeSeriesRef.current)
+        : null;
+
+      // Find RSI for this time
+      const rsiTimestamp = param.time as number;
+      const rsiPoint = rsiSeriesRef.current
+        ? param.seriesData.get(rsiSeriesRef.current)
+        : null;
+
+      const change = candleData.close - candleData.open;
+      const changePercent = ((candleData.close - candleData.open) / candleData.open) * 100;
+
+      // Format time
+      const date = new Date(rsiTimestamp * 1000);
+      const timeStr = date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      setTooltipData({
+        visible: true,
+        x: param.point.x,
+        y: param.point.y,
+        time: timeStr,
+        open: candleData.open,
+        high: candleData.high,
+        low: candleData.low,
+        close: candleData.close,
+        volume: (volumeData as { value?: number } | null)?.value || 0,
+        rsi: (rsiPoint as { value?: number } | null)?.value || null,
+        change,
+        changePercent,
+      });
     });
 
     // Create RSI chart if enabled
@@ -436,7 +532,7 @@ export default function CandlestickChart({
 
     // Add RSI crossing markers
     if (showRSICrossings && rsiData.length > 0) {
-      const crossings = detectRSICrossings(rsiData, rsiConfig);
+      const crossings = detectRSICrossings(rsiData, rsiConfig, showOversoldCrossings, showOverboughtCrossings);
 
       for (const crossing of crossings) {
         // Find the candle at this time to get the price
@@ -465,10 +561,10 @@ export default function CandlestickChart({
 
     // Fit content
     chartRef.current?.timeScale().fitContent();
-  }, [candles, rsiConfig, showRSI, showVolume, showTradeMarkers, showRSICrossings, trades, chartReady]);
+  }, [candles, rsiConfig, showRSI, showVolume, showTradeMarkers, showRSICrossings, showOversoldCrossings, showOverboughtCrossings, trades, chartReady]);
 
   return (
-    <div className="w-full">
+    <div className="w-full relative">
       <div
         ref={chartContainerRef}
         className="w-full"
@@ -482,6 +578,48 @@ export default function CandlestickChart({
             className="w-full"
             style={{ height: rsiChartHeight }}
           />
+        </div>
+      )}
+
+      {/* Tooltip */}
+      {tooltipData && tooltipData.visible && (
+        <div
+          ref={tooltipRef}
+          className="absolute pointer-events-none z-50 bg-dark-card border border-dark-border rounded-lg shadow-xl p-3 text-sm"
+          style={{
+            left: Math.min(tooltipData.x + 15, containerWidth - 200),
+            top: Math.max(tooltipData.y - 100, 10),
+          }}
+        >
+          <div className="text-gray-400 text-xs mb-2">{tooltipData.time}</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+            <span className="text-gray-500">Open:</span>
+            <span className="text-white font-mono">${tooltipData.open.toFixed(2)}</span>
+            <span className="text-gray-500">High:</span>
+            <span className="text-white font-mono">${tooltipData.high.toFixed(2)}</span>
+            <span className="text-gray-500">Low:</span>
+            <span className="text-white font-mono">${tooltipData.low.toFixed(2)}</span>
+            <span className="text-gray-500">Close:</span>
+            <span className="text-white font-mono">${tooltipData.close.toFixed(2)}</span>
+            <span className="text-gray-500">Change:</span>
+            <span className={`font-mono ${tooltipData.change >= 0 ? 'text-profit' : 'text-loss'}`}>
+              {tooltipData.change >= 0 ? '+' : ''}{tooltipData.change.toFixed(2)} ({tooltipData.changePercent >= 0 ? '+' : ''}{tooltipData.changePercent.toFixed(2)}%)
+            </span>
+            {tooltipData.volume > 0 && (
+              <>
+                <span className="text-gray-500">Volume:</span>
+                <span className="text-white font-mono">{formatVolume(tooltipData.volume)}</span>
+              </>
+            )}
+            {tooltipData.rsi !== null && (
+              <>
+                <span className="text-gray-500">RSI:</span>
+                <span className={`font-mono ${getRSIColor(tooltipData.rsi, rsiConfig)}`}>
+                  {tooltipData.rsi.toFixed(2)}
+                </span>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

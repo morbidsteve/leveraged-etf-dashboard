@@ -5,7 +5,7 @@ import { MainLayout } from '@/components/Layout';
 import { CandlestickChart } from '@/components/Chart';
 import { RSIIndicator } from '@/components/RSI';
 import { PriceDisplay } from '@/components/Price';
-import { usePriceData, useHydration, useStoreHydration } from '@/hooks';
+import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts } from '@/hooks';
 import { useTradeStore, useSettingsStore } from '@/store';
 import { ChartTimeframe, RSIConfig } from '@/types';
 
@@ -32,6 +32,8 @@ export default function ChartPage() {
   const [showRSISettings, setShowRSISettings] = useState(false);
   const [showTradeMarkers, setShowTradeMarkers] = useState(true);
   const [showRSICrossings, setShowRSICrossings] = useState(true);
+  const [showOversoldCrossings, setShowOversoldCrossings] = useState(true);
+  const [showOverboughtCrossings, setShowOverboughtCrossings] = useState(true);
 
   // Local RSI config state for editing
   const [localRSIConfig, setLocalRSIConfig] = useState<RSIConfig>({
@@ -77,6 +79,9 @@ export default function ChartPage() {
     updateRSIConfig(localRSIConfig);
     setShowRSISettings(false);
   };
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({ onRefresh: refresh });
 
   if (!hydrated || !storeHydrated) {
     return (
@@ -242,7 +247,7 @@ export default function ChartPage() {
             </div>
 
             {/* Marker toggles */}
-            <div className="flex items-center gap-6 mt-4 pt-4 border-t border-dark-border">
+            <div className="flex flex-wrap items-center gap-6 mt-4 pt-4 border-t border-dark-border">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -250,7 +255,7 @@ export default function ChartPage() {
                   onChange={(e) => setShowTradeMarkers(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-600 bg-dark-bg text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-sm text-gray-300">Show Trade Markers</span>
+                <span className="text-sm text-gray-300">Trade Markers</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -259,8 +264,30 @@ export default function ChartPage() {
                   onChange={(e) => setShowRSICrossings(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-600 bg-dark-bg text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-sm text-gray-300">Show RSI Crossing Markers</span>
+                <span className="text-sm text-gray-300">RSI Crossings</span>
               </label>
+              {showRSICrossings && (
+                <>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOversoldCrossings}
+                      onChange={(e) => setShowOversoldCrossings(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-600 bg-dark-bg text-green-600 focus:ring-green-500"
+                    />
+                    <span className="text-sm text-profit">Below {localRSIConfig.oversold}</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOverboughtCrossings}
+                      onChange={(e) => setShowOverboughtCrossings(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-600 bg-dark-bg text-red-600 focus:ring-red-500"
+                    />
+                    <span className="text-sm text-loss">Above {localRSIConfig.overbought}</span>
+                  </label>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -311,6 +338,8 @@ export default function ChartPage() {
               showVolume={true}
               showTradeMarkers={showTradeMarkers}
               showRSICrossings={showRSICrossings}
+              showOversoldCrossings={showOversoldCrossings}
+              showOverboughtCrossings={showOverboughtCrossings}
               height={600}
             />
           ) : (

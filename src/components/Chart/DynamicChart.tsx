@@ -21,6 +21,8 @@ interface DynamicChartProps {
   showVolume?: boolean;
   showTradeMarkers?: boolean;
   showRSICrossings?: boolean;
+  showOversoldCrossings?: boolean;
+  showOverboughtCrossings?: boolean;
   height?: number;
   onCrosshairMove?: (price: number | null, time: Time | null) => void;
 }

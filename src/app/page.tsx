@@ -6,7 +6,7 @@ import { PriceDisplay } from '@/components/Price';
 import { RSIIndicator, RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
 import { QuickStats, OpenPositions } from '@/components/Dashboard';
-import { usePriceData, useHydration, useStoreHydration } from '@/hooks';
+import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts } from '@/hooks';
 import { useTradeStore, usePriceStore, useSettingsStore } from '@/store';
 import { calculatePortfolioSummary } from '@/lib/calculations';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
@@ -30,6 +30,9 @@ export default function DashboardPage() {
 
   const trades = useTradeStore((state) => state.trades);
   const prices = usePriceStore((state) => state.prices);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({ onRefresh: refresh });
 
   const portfolioSummary = useMemo(() => {
     return calculatePortfolioSummary(trades);
