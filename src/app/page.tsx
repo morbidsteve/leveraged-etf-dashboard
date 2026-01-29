@@ -42,8 +42,9 @@ export default function DashboardPage() {
   const [showRSISettings, setShowRSISettings] = useState(false);
 
   // Use stored settings or defaults
+  const defaultWatchlist = ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'];
   const rsiConfig = storeHydrated ? settings.rsiConfig : DEFAULT_RSI_CONFIG;
-  const watchlist = storeHydrated ? settings.watchlist : ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'];
+  const watchlist = (storeHydrated && settings.watchlist) ? settings.watchlist : defaultWatchlist;
   const chartInterval = storeHydrated ? settings.chartSettings?.interval || '1m' : '1m';
   const chartRange = storeHydrated ? settings.chartSettings?.range || '5d' : '5d';
   const refreshInterval = storeHydrated ? settings.refreshInterval : 1000;
