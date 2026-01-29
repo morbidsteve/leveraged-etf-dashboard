@@ -364,24 +364,28 @@ export const useSettingsStore = create<SettingsState>()(
       addToWatchlist: (ticker) =>
         set((state) => {
           const upperTicker = ticker.toUpperCase();
-          if (state.settings.watchlist.includes(upperTicker)) {
+          const currentWatchlist = state.settings.watchlist || ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'];
+          if (currentWatchlist.includes(upperTicker)) {
             return state; // Already in watchlist
           }
           return {
             settings: {
               ...state.settings,
-              watchlist: [...state.settings.watchlist, upperTicker],
+              watchlist: [...currentWatchlist, upperTicker],
             },
           };
         }),
 
       removeFromWatchlist: (ticker) =>
-        set((state) => ({
-          settings: {
-            ...state.settings,
-            watchlist: state.settings.watchlist.filter((t) => t !== ticker.toUpperCase()),
-          },
-        })),
+        set((state) => {
+          const currentWatchlist = state.settings.watchlist || ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'];
+          return {
+            settings: {
+              ...state.settings,
+              watchlist: currentWatchlist.filter((t) => t !== ticker.toUpperCase()),
+            },
+          };
+        }),
 
       updateChartSettings: (chartSettings) =>
         set((state) => ({

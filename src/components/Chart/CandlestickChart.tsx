@@ -103,64 +103,40 @@ function getRSIColor(rsi: number, config: RSIConfig): string {
 }
 
 // Helper to detect RSI threshold crossings based on config
-// Marks every time RSI crosses INTO a zone - one marker per entry into the zone
+// Simple logic: mark when RSI crosses FROM above threshold TO below (oversold) or FROM below TO above (overbought)
 function detectRSICrossings(
   rsiData: { time: number; value: number }[],
   config: RSIConfig,
   showOversoldCrossings: boolean = true,
-  showOverboughtCrossings: boolean = false // Default to false - only show buy signals
+  showOverboughtCrossings: boolean = false
 ): RSICrossing[] {
   const crossings: RSICrossing[] = [];
 
-  if (rsiData.length === 0) return crossings;
+  if (rsiData.length < 2) return crossings;
 
-  // Track whether we're currently in each zone
-  let inOversoldZone = false;
-  let inOverboughtZone = false;
-
-  for (let i = 0; i < rsiData.length; i++) {
+  for (let i = 1; i < rsiData.length; i++) {
+    const prev = rsiData[i - 1];
     const curr = rsiData[i];
-    const prev = i > 0 ? rsiData[i - 1] : null;
 
-    // OVERSOLD ZONE (BUY SIGNAL)
+    // OVERSOLD crossing: RSI drops from >= threshold to < threshold
     if (showOversoldCrossings) {
-      const currBelowThreshold = curr.value < config.oversold;
-      const prevAboveOrAtThreshold = prev === null || prev.value >= config.oversold;
-
-      // Mark crossing INTO oversold zone
-      if (currBelowThreshold && prevAboveOrAtThreshold && !inOversoldZone) {
+      if (prev.value >= config.oversold && curr.value < config.oversold) {
         crossings.push({
           time: curr.time,
           type: 'oversold',
           rsiValue: curr.value,
         });
-        inOversoldZone = true;
-      }
-
-      // Exit oversold zone when RSI goes back above threshold
-      if (inOversoldZone && curr.value >= config.oversold) {
-        inOversoldZone = false;
       }
     }
 
-    // OVERBOUGHT ZONE (SELL SIGNAL)
+    // OVERBOUGHT crossing: RSI rises from <= threshold to > threshold
     if (showOverboughtCrossings) {
-      const currAboveThreshold = curr.value > config.overbought;
-      const prevBelowOrAtThreshold = prev === null || prev.value <= config.overbought;
-
-      // Mark crossing INTO overbought zone
-      if (currAboveThreshold && prevBelowOrAtThreshold && !inOverboughtZone) {
+      if (prev.value <= config.overbought && curr.value > config.overbought) {
         crossings.push({
           time: curr.time,
           type: 'overbought',
           rsiValue: curr.value,
         });
-        inOverboughtZone = true;
-      }
-
-      // Exit overbought zone when RSI goes back below threshold
-      if (inOverboughtZone && curr.value <= config.overbought) {
-        inOverboughtZone = false;
       }
     }
   }
@@ -633,10 +609,12 @@ export default function CandlestickChart({
     if (showRSICrossings && rsiData.length > 0) {
       const crossings = detectRSICrossings(rsiData, rsiConfig, showOversoldCrossings, showOverboughtCrossings);
 
+      // Create a map of candle times for fast lookup
+      const candleTimeSet = new Set(candles.map(c => c.time));
+
       for (const crossing of crossings) {
-        // Find the candle at this time to get the price
-        const candle = candles.find((c) => c.time === crossing.time);
-        if (candle) {
+        // Verify this time exists in candle data (should always be true since RSI is derived from candles)
+        if (candleTimeSet.has(crossing.time)) {
           markers.push({
             time: crossing.time as Time,
             position: crossing.type === 'oversold' ? 'belowBar' : 'aboveBar',
