@@ -452,16 +452,21 @@ export default function CandlestickChart({
         },
       });
 
-      // Sync time scales bidirectionally
+      // Sync time scales bidirectionally using TIME (not logical index)
+      // This is critical because RSI data starts at index 250, not 0
       let isSyncingFromMain = false;
       let isSyncingFromRsi = false;
 
       chart.timeScale().subscribeVisibleTimeRangeChange(() => {
         if (isSyncingFromRsi) return;
         isSyncingFromMain = true;
-        const logicalRange = chart.timeScale().getVisibleLogicalRange();
-        if (logicalRange) {
-          rsiChart.timeScale().setVisibleLogicalRange(logicalRange);
+        try {
+          const timeRange = chart.timeScale().getVisibleRange();
+          if (timeRange) {
+            rsiChart.timeScale().setVisibleRange(timeRange);
+          }
+        } catch {
+          // RSI chart may not have data for this time range, ignore
         }
         isSyncingFromMain = false;
       });
@@ -469,9 +474,13 @@ export default function CandlestickChart({
       rsiChart.timeScale().subscribeVisibleTimeRangeChange(() => {
         if (isSyncingFromMain) return;
         isSyncingFromRsi = true;
-        const logicalRange = rsiChart.timeScale().getVisibleLogicalRange();
-        if (logicalRange) {
-          chart.timeScale().setVisibleLogicalRange(logicalRange);
+        try {
+          const timeRange = rsiChart.timeScale().getVisibleRange();
+          if (timeRange) {
+            chart.timeScale().setVisibleRange(timeRange);
+          }
+        } catch {
+          // Ignore errors during sync
         }
         isSyncingFromRsi = false;
       });
@@ -646,11 +655,15 @@ export default function CandlestickChart({
       // Fit main chart content
       chartRef.current.timeScale().fitContent();
 
-      // Sync RSI chart to main chart's visible range
+      // Sync RSI chart to main chart's visible TIME range (not logical)
       if (rsiChartRef.current) {
-        const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
-        if (logicalRange) {
-          rsiChartRef.current.timeScale().setVisibleLogicalRange(logicalRange);
+        try {
+          const timeRange = chartRef.current.timeScale().getVisibleRange();
+          if (timeRange) {
+            rsiChartRef.current.timeScale().setVisibleRange(timeRange);
+          }
+        } catch {
+          // RSI chart may not have data yet
         }
       }
     }
@@ -662,9 +675,13 @@ export default function CandlestickChart({
     if (chartReady && chartRef.current && rsiChartRef.current && candles.length > 0) {
       // Small delay to ensure data is rendered
       const timer = setTimeout(() => {
-        const logicalRange = chartRef.current?.timeScale().getVisibleLogicalRange();
-        if (logicalRange && rsiChartRef.current) {
-          rsiChartRef.current.timeScale().setVisibleLogicalRange(logicalRange);
+        try {
+          const timeRange = chartRef.current?.timeScale().getVisibleRange();
+          if (timeRange && rsiChartRef.current) {
+            rsiChartRef.current.timeScale().setVisibleRange(timeRange);
+          }
+        } catch {
+          // RSI chart may not have data for this range
         }
       }, 50);
       return () => clearTimeout(timer);

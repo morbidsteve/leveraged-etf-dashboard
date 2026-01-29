@@ -28,10 +28,13 @@ export function Watchlist({ items, selectedTicker, onSelect, onRemove }: Watchli
         const isPositive = changePercent >= 0;
 
         return (
-          <button
+          <div
             key={item.ticker}
             onClick={() => onSelect(item.ticker)}
-            className={`card card-body p-3 text-left transition-all ${
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && onSelect(item.ticker)}
+            className={`card card-body p-3 text-left transition-all cursor-pointer ${
               isSelected
                 ? 'ring-2 ring-blue-500 bg-blue-500/10'
                 : 'hover:bg-dark-hover'
@@ -97,7 +100,7 @@ export function Watchlist({ items, selectedTicker, onSelect, onRemove }: Watchli
             ) : (
               <div className="text-gray-500 text-sm">No data</div>
             )}
-          </button>
+          </div>
         );
       })}
     </div>

@@ -33,7 +33,7 @@ export default function ChartPage() {
   const [showTradeMarkers, setShowTradeMarkers] = useState(true);
   const [showRSICrossings, setShowRSICrossings] = useState(true);
   const [showOversoldCrossings, setShowOversoldCrossings] = useState(true);
-  const [showOverboughtCrossings, setShowOverboughtCrossings] = useState(true);
+  const [showOverboughtCrossings, setShowOverboughtCrossings] = useState(false);
 
   // Local RSI config state for editing
   const [localRSIConfig, setLocalRSIConfig] = useState<RSIConfig>({
