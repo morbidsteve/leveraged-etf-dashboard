@@ -103,34 +103,65 @@ function getRSIColor(rsi: number, config: RSIConfig): string {
 }
 
 // Helper to detect RSI threshold crossings based on config
+// Marks every time RSI crosses INTO a zone - one marker per entry into the zone
 function detectRSICrossings(
   rsiData: { time: number; value: number }[],
   config: RSIConfig,
   showOversoldCrossings: boolean = true,
-  showOverboughtCrossings: boolean = true
+  showOverboughtCrossings: boolean = false // Default to false - only show buy signals
 ): RSICrossing[] {
   const crossings: RSICrossing[] = [];
 
-  for (let i = 1; i < rsiData.length; i++) {
-    const prev = rsiData[i - 1];
-    const curr = rsiData[i];
+  if (rsiData.length === 0) return crossings;
 
-    // Crossing below oversold threshold (entering oversold zone)
-    if (showOversoldCrossings && prev.value >= config.oversold && curr.value < config.oversold) {
-      crossings.push({
-        time: curr.time,
-        type: 'oversold',
-        rsiValue: curr.value,
-      });
+  // Track whether we're currently in each zone
+  let inOversoldZone = false;
+  let inOverboughtZone = false;
+
+  for (let i = 0; i < rsiData.length; i++) {
+    const curr = rsiData[i];
+    const prev = i > 0 ? rsiData[i - 1] : null;
+
+    // OVERSOLD ZONE (BUY SIGNAL)
+    if (showOversoldCrossings) {
+      const currBelowThreshold = curr.value < config.oversold;
+      const prevAboveOrAtThreshold = prev === null || prev.value >= config.oversold;
+
+      // Mark crossing INTO oversold zone
+      if (currBelowThreshold && prevAboveOrAtThreshold && !inOversoldZone) {
+        crossings.push({
+          time: curr.time,
+          type: 'oversold',
+          rsiValue: curr.value,
+        });
+        inOversoldZone = true;
+      }
+
+      // Exit oversold zone when RSI goes back above threshold
+      if (inOversoldZone && curr.value >= config.oversold) {
+        inOversoldZone = false;
+      }
     }
 
-    // Crossing above overbought threshold (entering overbought zone)
-    if (showOverboughtCrossings && prev.value <= config.overbought && curr.value > config.overbought) {
-      crossings.push({
-        time: curr.time,
-        type: 'overbought',
-        rsiValue: curr.value,
-      });
+    // OVERBOUGHT ZONE (SELL SIGNAL)
+    if (showOverboughtCrossings) {
+      const currAboveThreshold = curr.value > config.overbought;
+      const prevBelowOrAtThreshold = prev === null || prev.value <= config.overbought;
+
+      // Mark crossing INTO overbought zone
+      if (currAboveThreshold && prevBelowOrAtThreshold && !inOverboughtZone) {
+        crossings.push({
+          time: curr.time,
+          type: 'overbought',
+          rsiValue: curr.value,
+        });
+        inOverboughtZone = true;
+      }
+
+      // Exit overbought zone when RSI goes back below threshold
+      if (inOverboughtZone && curr.value <= config.overbought) {
+        inOverboughtZone = false;
+      }
     }
   }
 
@@ -255,10 +286,27 @@ export default function CandlestickChart({
       rightPriceScale: {
         borderColor: '#2a2a2a',
       },
+      localization: {
+        // Use local timezone for time display
+        timeFormatter: (time: number) => {
+          const date = new Date(time * 1000);
+          return date.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          });
+        },
+      },
       timeScale: {
         borderColor: '#2a2a2a',
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: (time: number) => {
+          const date = new Date(time * 1000);
+          const hours = date.getHours().toString().padStart(2, '0');
+          const minutes = date.getMinutes().toString().padStart(2, '0');
+          return `${hours}:${minutes}`;
+        },
       },
       handleScroll: {
         mouseWheel: true,
@@ -428,11 +476,44 @@ export default function CandlestickChart({
         },
       });
 
-      // Sync time scales
+      // Sync time scales bidirectionally
+      let isSyncingFromMain = false;
+      let isSyncingFromRsi = false;
+
       chart.timeScale().subscribeVisibleTimeRangeChange(() => {
+        if (isSyncingFromRsi) return;
+        isSyncingFromMain = true;
         const logicalRange = chart.timeScale().getVisibleLogicalRange();
         if (logicalRange) {
           rsiChart.timeScale().setVisibleLogicalRange(logicalRange);
+        }
+        isSyncingFromMain = false;
+      });
+
+      rsiChart.timeScale().subscribeVisibleTimeRangeChange(() => {
+        if (isSyncingFromMain) return;
+        isSyncingFromRsi = true;
+        const logicalRange = rsiChart.timeScale().getVisibleLogicalRange();
+        if (logicalRange) {
+          chart.timeScale().setVisibleLogicalRange(logicalRange);
+        }
+        isSyncingFromRsi = false;
+      });
+
+      // Sync crosshairs between charts
+      chart.subscribeCrosshairMove((param) => {
+        if (param.time) {
+          rsiChart.setCrosshairPosition(0, param.time, rsiSeries);
+        } else {
+          rsiChart.clearCrosshairPosition();
+        }
+      });
+
+      rsiChart.subscribeCrosshairMove((param) => {
+        if (param.time) {
+          chart.setCrosshairPosition(0, param.time, candlestickSeries);
+        } else {
+          chart.clearCrosshairPosition();
         }
       });
     }
@@ -577,9 +658,17 @@ export default function CandlestickChart({
       }
     }
 
-    // Fit content
-    chartRef.current?.timeScale().fitContent();
+    // Only fit content on initial load, not on every update
+    // This prevents the chart from resetting position when user has panned
   }, [candles, rsiConfig, showRSI, showVolume, showTradeMarkers, showRSICrossings, showOversoldCrossings, showOverboughtCrossings, trades, chartReady]);
+
+  // Fit content only once when chart first becomes ready with data
+  useEffect(() => {
+    if (chartReady && candles.length > 0 && chartRef.current) {
+      chartRef.current.timeScale().fitContent();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartReady]); // Only run when chartReady changes, not on every candle update
 
   return (
     <div ref={wrapperRef} className="w-full h-full relative">

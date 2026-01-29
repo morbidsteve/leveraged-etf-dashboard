@@ -27,7 +27,7 @@ export function usePriceData({
   ticker,
   interval = '1m',
   range = '5d',
-  refreshInterval = 5000,
+  refreshInterval = 1000, // 1 second default
   enabled = true,
   rsiConfig = DEFAULT_RSI_CONFIG,
 }: UsePriceDataOptions): UsePriceDataReturn {

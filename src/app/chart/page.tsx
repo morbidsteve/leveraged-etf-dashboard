@@ -57,7 +57,7 @@ export default function ChartPage() {
     ticker: selectedTicker,
     interval: selectedTimeframe.value,
     range,
-    refreshInterval: selectedTimeframe.minutes <= 5 ? 10000 : 30000,
+    refreshInterval: selectedTimeframe.minutes <= 5 ? 1000 : 5000, // 1 second for fast timeframes
     enabled: hydrated,
     rsiConfig,
   });

@@ -17,7 +17,7 @@ export default function CalculatorPage() {
 
   const { priceData } = usePriceData({
     ticker: 'TQQQ',
-    refreshInterval: 10000,
+    refreshInterval: 1000, // 1 second updates
   });
 
   const trades = useTradeStore((state) => state.trades);

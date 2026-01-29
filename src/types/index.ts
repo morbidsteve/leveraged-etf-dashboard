@@ -194,6 +194,11 @@ export interface AppSettings {
   alertSettings: AlertSettings;
   refreshInterval: number; // in milliseconds
   scannerSettings: ScannerSettings;
+  watchlist: string[]; // User's watchlist tickers
+  chartSettings: {
+    interval: '1m' | '5m' | '15m' | '1h' | '1d';
+    range: '1d' | '5d' | '1mo' | '3mo';
+  };
 }
 
 // API response types

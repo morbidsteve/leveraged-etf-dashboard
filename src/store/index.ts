@@ -301,6 +301,9 @@ interface SettingsState {
   updateSettings: (updates: Partial<AppSettings>) => void;
   updateRSIConfig: (config: Partial<RSIConfig>) => void;
   updateScannerSettings: (config: Partial<ScannerSettings>) => void;
+  addToWatchlist: (ticker: string) => void;
+  removeFromWatchlist: (ticker: string) => void;
+  updateChartSettings: (settings: Partial<AppSettings['chartSettings']>) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -325,8 +328,13 @@ export const useSettingsStore = create<SettingsState>()(
           cooldownMinutes: 5,
           enabled: true,
         },
-        refreshInterval: 5000, // 5 seconds
+        refreshInterval: 1000, // 1 second updates
         scannerSettings: DEFAULT_SCANNER_SETTINGS,
+        watchlist: ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'], // Default watchlist
+        chartSettings: {
+          interval: '1m',
+          range: '5d',
+        },
       },
       _hasHydrated: false,
 
@@ -350,6 +358,36 @@ export const useSettingsStore = create<SettingsState>()(
           settings: {
             ...state.settings,
             scannerSettings: { ...state.settings.scannerSettings, ...config },
+          },
+        })),
+
+      addToWatchlist: (ticker) =>
+        set((state) => {
+          const upperTicker = ticker.toUpperCase();
+          if (state.settings.watchlist.includes(upperTicker)) {
+            return state; // Already in watchlist
+          }
+          return {
+            settings: {
+              ...state.settings,
+              watchlist: [...state.settings.watchlist, upperTicker],
+            },
+          };
+        }),
+
+      removeFromWatchlist: (ticker) =>
+        set((state) => ({
+          settings: {
+            ...state.settings,
+            watchlist: state.settings.watchlist.filter((t) => t !== ticker.toUpperCase()),
+          },
+        })),
+
+      updateChartSettings: (chartSettings) =>
+        set((state) => ({
+          settings: {
+            ...state.settings,
+            chartSettings: { ...state.settings.chartSettings, ...chartSettings },
           },
         })),
     }),

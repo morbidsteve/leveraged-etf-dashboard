@@ -23,7 +23,7 @@ export default function NewTradePage() {
 
   const { priceData } = usePriceData({
     ticker,
-    refreshInterval: 10000,
+    refreshInterval: 1000, // 1 second updates
     enabled: hydrated,
   });
 

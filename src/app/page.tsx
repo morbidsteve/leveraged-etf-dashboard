@@ -1,32 +1,84 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { MainLayout } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIIndicator, RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { QuickStats, OpenPositions } from '@/components/Dashboard';
+import { QuickStats, OpenPositions, Watchlist } from '@/components/Dashboard';
 import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts } from '@/hooks';
 import { useTradeStore, usePriceStore, useSettingsStore } from '@/store';
 import { calculatePortfolioSummary } from '@/lib/calculations';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 
+const INTERVALS = [
+  { label: '1m', value: '1m' as const },
+  { label: '5m', value: '5m' as const },
+  { label: '15m', value: '15m' as const },
+  { label: '1h', value: '1h' as const },
+  { label: '1D', value: '1d' as const },
+];
+
+const RANGES = [
+  { label: '1D', value: '1d' as const },
+  { label: '5D', value: '5d' as const },
+  { label: '1M', value: '1mo' as const },
+  { label: '3M', value: '3mo' as const },
+];
+
 export default function DashboardPage() {
   const hydrated = useHydration();
   const storeHydrated = useStoreHydration();
   const settings = useSettingsStore((state) => state.settings);
+  const updateRSIConfig = useSettingsStore((state) => state.updateRSIConfig);
+  const addToWatchlist = useSettingsStore((state) => state.addToWatchlist);
+  const removeFromWatchlist = useSettingsStore((state) => state.removeFromWatchlist);
+  const updateChartSettings = useSettingsStore((state) => state.updateChartSettings);
 
-  // Use stored RSI config or default if not hydrated
+  const [selectedTicker, setSelectedTicker] = useState('TQQQ');
+  const [showBuySignals, setShowBuySignals] = useState(true);
+  const [showAddTicker, setShowAddTicker] = useState(false);
+  const [newTicker, setNewTicker] = useState('');
+  const [showRSISettings, setShowRSISettings] = useState(false);
+
+  // Use stored settings or defaults
   const rsiConfig = storeHydrated ? settings.rsiConfig : DEFAULT_RSI_CONFIG;
+  const watchlist = storeHydrated ? settings.watchlist : ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'];
+  const chartInterval = storeHydrated ? settings.chartSettings?.interval || '1m' : '1m';
+  const chartRange = storeHydrated ? settings.chartSettings?.range || '5d' : '5d';
+  const refreshInterval = storeHydrated ? settings.refreshInterval : 1000;
 
-  const { priceData, candles, rsiData, isLoading, error, refresh } = usePriceData({
-    ticker: 'TQQQ',
-    interval: '1m',
-    range: '5d',
-    refreshInterval: 10000,
-    enabled: hydrated,
-    rsiConfig,
-  });
+  // Dynamic data fetching for watchlist tickers
+  const tickerDataHooks: Record<string, ReturnType<typeof usePriceData>> = {};
+
+  // We need to call hooks unconditionally, so we'll fetch for all potential tickers
+  const tqqq = usePriceData({ ticker: 'TQQQ', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('TQQQ'), rsiConfig });
+  const sqqq = usePriceData({ ticker: 'SQQQ', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('SQQQ'), rsiConfig });
+  const upro = usePriceData({ ticker: 'UPRO', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('UPRO'), rsiConfig });
+  const spxu = usePriceData({ ticker: 'SPXU', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('SPXU'), rsiConfig });
+  const tna = usePriceData({ ticker: 'TNA', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('TNA'), rsiConfig });
+  const tza = usePriceData({ ticker: 'TZA', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('TZA'), rsiConfig });
+  const labu = usePriceData({ ticker: 'LABU', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('LABU'), rsiConfig });
+  const labd = usePriceData({ ticker: 'LABD', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('LABD'), rsiConfig });
+  const soxl = usePriceData({ ticker: 'SOXL', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('SOXL'), rsiConfig });
+  const soxs = usePriceData({ ticker: 'SOXS', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('SOXS'), rsiConfig });
+  const tecl = usePriceData({ ticker: 'TECL', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('TECL'), rsiConfig });
+  const tecs = usePriceData({ ticker: 'TECS', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('TECS'), rsiConfig });
+  const fngu = usePriceData({ ticker: 'FNGU', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('FNGU'), rsiConfig });
+  const fngd = usePriceData({ ticker: 'FNGD', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('FNGD'), rsiConfig });
+  const custom = usePriceData({ ticker: selectedTicker, interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && !['TQQQ','SQQQ','UPRO','SPXU','TNA','TZA','LABU','LABD','SOXL','SOXS','TECL','TECS','FNGU','FNGD'].includes(selectedTicker), rsiConfig });
+
+  // Map ticker data
+  const tickerDataMap: Record<string, ReturnType<typeof usePriceData>> = {
+    TQQQ: tqqq, SQQQ: sqqq, UPRO: upro, SPXU: spxu,
+    TNA: tna, TZA: tza, LABU: labu, LABD: labd,
+    SOXL: soxl, SOXS: soxs, TECL: tecl, TECS: tecs,
+    FNGU: fngu, FNGD: fngd,
+  };
+
+  // Get selected ticker's data
+  const selectedData = tickerDataMap[selectedTicker] || custom;
+  const { priceData, candles, rsiData, isLoading, error, refresh } = selectedData;
 
   const trades = useTradeStore((state) => state.trades);
   const prices = usePriceStore((state) => state.prices);
@@ -37,6 +89,25 @@ export default function DashboardPage() {
   const portfolioSummary = useMemo(() => {
     return calculatePortfolioSummary(trades);
   }, [trades]);
+
+  // Build watchlist items
+  const watchlistItems = watchlist.map((ticker) => {
+    const data = tickerDataMap[ticker] || { priceData: null, rsiData: null, isLoading: true };
+    return {
+      ticker,
+      priceData: data.priceData,
+      rsiData: data.rsiData,
+      isLoading: data.isLoading,
+    };
+  });
+
+  const handleAddTicker = () => {
+    if (newTicker.trim()) {
+      addToWatchlist(newTicker.trim());
+      setNewTicker('');
+      setShowAddTicker(false);
+    }
+  };
 
   if (!hydrated || !storeHydrated) {
     return (
@@ -50,7 +121,54 @@ export default function DashboardPage() {
 
   return (
     <MainLayout>
-      {/* Header with Price and RSI */}
+      {/* Watchlist - Multi-ticker overview */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wide">Watchlist</h2>
+          <div className="flex items-center gap-2">
+            {showAddTicker ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newTicker}
+                  onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddTicker()}
+                  placeholder="TICKER"
+                  className="w-24 px-2 py-1 text-xs bg-dark-card border border-gray-600 rounded text-white"
+                  autoFocus
+                />
+                <button
+                  onClick={handleAddTicker}
+                  className="text-xs px-2 py-1 bg-profit/20 text-profit rounded hover:bg-profit/30"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => { setShowAddTicker(false); setNewTicker(''); }}
+                  className="text-xs px-2 py-1 bg-gray-700 text-gray-400 rounded hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowAddTicker(true)}
+                className="text-xs px-2 py-1 bg-gray-700/50 text-gray-400 rounded hover:bg-gray-600 hover:text-white transition-colors"
+              >
+                + Add Ticker
+              </button>
+            )}
+          </div>
+        </div>
+        <Watchlist
+          items={watchlistItems}
+          selectedTicker={selectedTicker}
+          onSelect={setSelectedTicker}
+          onRemove={removeFromWatchlist}
+        />
+      </div>
+
+      {/* Selected Ticker Details + RSI Settings */}
       <div className="flex flex-col lg:flex-row gap-6 mb-6">
         {/* Price Card */}
         <div className="card flex-1">
@@ -73,10 +191,55 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* RSI Card */}
-        <div className="card w-full lg:w-80">
+        {/* RSI Card with Settings */}
+        <div className="card w-full lg:w-96">
           <div className="card-body">
-            <RSIGauge data={rsiData} config={rsiConfig} />
+            <div className="flex items-center justify-between mb-2">
+              <RSIGauge data={rsiData} config={rsiConfig} />
+              <button
+                onClick={() => setShowRSISettings(!showRSISettings)}
+                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                title="RSI Settings"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
+
+            {/* RSI Settings Panel */}
+            {showRSISettings && (
+              <div className="mt-3 pt-3 border-t border-gray-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-gray-400">Oversold (Buy)</label>
+                  <input
+                    type="number"
+                    value={rsiConfig.oversold}
+                    onChange={(e) => updateRSIConfig({ oversold: Number(e.target.value) })}
+                    className="w-16 px-2 py-1 text-xs bg-dark-card border border-gray-600 rounded text-white text-right"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-gray-400">Overbought (Sell)</label>
+                  <input
+                    type="number"
+                    value={rsiConfig.overbought}
+                    onChange={(e) => updateRSIConfig({ overbought: Number(e.target.value) })}
+                    className="w-16 px-2 py-1 text-xs bg-dark-card border border-gray-600 rounded text-white text-right"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-gray-400">Period</label>
+                  <input
+                    type="number"
+                    value={rsiConfig.period}
+                    onChange={(e) => updateRSIConfig({ period: Number(e.target.value) })}
+                    className="w-16 px-2 py-1 text-xs bg-dark-card border border-gray-600 rounded text-white text-right"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -88,15 +251,58 @@ export default function DashboardPage() {
 
       {/* Chart Section */}
       <div className="card mb-6">
-        <div className="card-header flex items-center justify-between">
+        <div className="card-header flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-4">
-            <h3 className="font-medium text-white">TQQQ Chart</h3>
+            <h3 className="font-medium text-white">{selectedTicker} Chart</h3>
             <div className="flex items-center gap-2">
               <RSIIndicator data={rsiData} size="sm" showLabel={false} />
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">1-min candles</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Chart Interval */}
+            <div className="flex items-center gap-1 bg-gray-800/50 rounded p-0.5">
+              {INTERVALS.map((int) => (
+                <button
+                  key={int.value}
+                  onClick={() => updateChartSettings({ interval: int.value })}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    chartInterval === int.value
+                      ? 'bg-blue-500/30 text-blue-400'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {int.label}
+                </button>
+              ))}
+            </div>
+            {/* Chart Range */}
+            <div className="flex items-center gap-1 bg-gray-800/50 rounded p-0.5">
+              {RANGES.map((rng) => (
+                <button
+                  key={rng.value}
+                  onClick={() => updateChartSettings({ range: rng.value })}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    chartRange === rng.value
+                      ? 'bg-purple-500/30 text-purple-400'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {rng.label}
+                </button>
+              ))}
+            </div>
+            {/* Buy Signal Toggle */}
+            <button
+              onClick={() => setShowBuySignals(!showBuySignals)}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                showBuySignals
+                  ? 'bg-profit/20 text-profit border border-profit/30'
+                  : 'bg-gray-700/50 text-gray-400 border border-gray-600'
+              }`}
+              title="Toggle RSI buy signal markers"
+            >
+              RSI Buy Signals {showBuySignals ? 'ON' : 'OFF'}
+            </button>
             {isLoading && (
               <span className="text-xs text-gray-500 animate-pulse">Updating...</span>
             )}
@@ -107,12 +313,14 @@ export default function DashboardPage() {
             <div className="h-[300px] sm:h-[400px] lg:h-[500px]">
               <CandlestickChart
                 candles={candles}
-                trades={trades.filter((t) => t.ticker === 'TQQQ')}
+                trades={trades.filter((t) => t.ticker === selectedTicker)}
                 rsiConfig={rsiConfig}
                 showRSI={true}
                 showVolume={true}
                 showTradeMarkers={true}
-                showRSICrossings={true}
+                showRSICrossings={showBuySignals}
+                showOversoldCrossings={showBuySignals}
+                showOverboughtCrossings={false}
               />
             </div>
           ) : (
