@@ -2,10 +2,15 @@
 
 ## Workflow Requirements
 
+### Development Server
+- Start with `npm run dev` - runs on http://localhost:3000
+- **DO NOT run `npm run build` while dev server is running** - it writes to `.next/` and breaks the dev server
+- If dev server gets into bad state, restart: `lsof -ti:3000 | xargs kill -9; npm run dev`
+
 ### Before Committing Any Changes
-1. **Run TypeScript checks**: `npx tsc --noEmit`
-2. **Run build test**: `npm run build`
-3. **Test in browser**: Verify the feature works at http://localhost:3000
+1. **Run TypeScript checks**: `npx tsc --noEmit` (safe to run anytime)
+2. **Test in browser**: Verify the feature works at http://localhost:3000
+3. **Run build test**: `npm run build` (only after browser testing, may need to restart dev server after)
 4. Only commit after all checks pass
 
 ### Git Workflow
