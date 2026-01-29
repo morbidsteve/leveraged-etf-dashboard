@@ -640,13 +640,36 @@ export default function CandlestickChart({
     // This prevents the chart from resetting position when user has panned
   }, [candles, rsiConfig, showRSI, showVolume, showTradeMarkers, showRSICrossings, showOversoldCrossings, showOverboughtCrossings, trades, chartReady]);
 
-  // Fit content only once when chart first becomes ready with data
+  // Fit content and sync both charts when ready with data
   useEffect(() => {
     if (chartReady && candles.length > 0 && chartRef.current) {
+      // Fit main chart content
       chartRef.current.timeScale().fitContent();
+
+      // Sync RSI chart to main chart's visible range
+      if (rsiChartRef.current) {
+        const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
+        if (logicalRange) {
+          rsiChartRef.current.timeScale().setVisibleLogicalRange(logicalRange);
+        }
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartReady]); // Only run when chartReady changes, not on every candle update
+
+  // Also sync after data updates
+  useEffect(() => {
+    if (chartReady && chartRef.current && rsiChartRef.current && candles.length > 0) {
+      // Small delay to ensure data is rendered
+      const timer = setTimeout(() => {
+        const logicalRange = chartRef.current?.timeScale().getVisibleLogicalRange();
+        if (logicalRange && rsiChartRef.current) {
+          rsiChartRef.current.timeScale().setVisibleLogicalRange(logicalRange);
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [candles, chartReady]);
 
   return (
     <div ref={wrapperRef} className="w-full h-full relative">
