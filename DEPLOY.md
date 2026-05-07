@@ -62,3 +62,26 @@ Then deploy the image with port 3000 exposed. No persistent volume needed.
 git pull
 docker compose up -d --build
 ```
+
+## Auto-rebuild after every commit (recommended for the dev VM)
+
+The repo ships a one-time setup that wires a git `post-commit` hook to a debounced background rebuild of the Docker container. Useful when the dashboard is sitting behind a Cloudflare tunnel or similar and you want code changes to deploy automatically as you commit.
+
+```bash
+./scripts/install-auto-rebuild.sh
+```
+
+That sets `core.hooksPath` to `scripts/git-hooks` (the hook lives in the repo, so it survives `git clone`).
+
+How it behaves:
+
+- Every commit fires `scripts/auto-rebuild.sh` in the background. The commit returns immediately.
+- The script waits a 15-second debounce window (`ETF_REBUILD_DEBOUNCE=30 git commit ...` to override). If you commit again during the window, only one rebuild runs and it picks up the latest HEAD.
+- `docker compose up -d --build` is non-destructive: the running container keeps serving traffic until the new image builds successfully. A failed build leaves the old container running.
+- After the rebuild succeeds, the script polls `http://localhost:3000/` for up to 30 seconds and logs whether the new container came up healthy.
+
+Logging and controls:
+
+- Watch progress: `tail -f .auto-rebuild.log`
+- Skip a single commit: `ETF_NO_AUTO_REBUILD=1 git commit ...`
+- The hook auto-skips during rebases, cherry-picks, and merges so multi-commit operations don't trigger a build per intermediate commit.

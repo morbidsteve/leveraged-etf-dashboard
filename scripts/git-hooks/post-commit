@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Fire-and-forget auto-rebuild trigger.
+# Returns immediately so commits stay snappy.
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+[[ -z "$REPO_ROOT" ]] && exit 0
+
+REBUILD_SCRIPT="$REPO_ROOT/scripts/auto-rebuild.sh"
+[[ -x "$REBUILD_SCRIPT" ]] || exit 0
+
+# Skip during rebases / cherry-picks / merges (don't fire on every intermediate commit)
+if [[ -d "$REPO_ROOT/.git/rebase-merge" ]] || \
+   [[ -d "$REPO_ROOT/.git/rebase-apply" ]] || \
+   [[ -f "$REPO_ROOT/.git/CHERRY_PICK_HEAD" ]] || \
+   [[ -f "$REPO_ROOT/.git/MERGE_HEAD" ]]; then
+  exit 0
+fi
+
+# Allow opt-out per commit:  ETF_NO_AUTO_REBUILD=1 git commit ...
+if [[ "${ETF_NO_AUTO_REBUILD:-0}" = "1" ]]; then
+  exit 0
+fi
+
+nohup "$REBUILD_SCRIPT" >/dev/null 2>&1 &
+disown 2>/dev/null || true
+exit 0
