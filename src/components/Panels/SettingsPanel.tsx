@@ -3,6 +3,7 @@
 import { useSettingsStore, useTradeStore, DEFAULT_SCANNER_SETTINGS } from '@/store';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 import { Trade } from '@/types';
+import { SchwabConnectCard } from '@/components/Strategy';
 
 export default function SettingsPanel() {
   const { settings, updateSettings, updateRSIConfig, updateScannerSettings } =
@@ -32,6 +33,8 @@ export default function SettingsPanel() {
 
   return (
     <div className="space-y-6">
+      <SchwabConnectCard />
+
       <div className="card">
         <div className="card-header">
           <h2 className="font-medium text-white">General</h2>

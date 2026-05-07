@@ -11,12 +11,23 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
-    # Uncomment if you want to pass through optional API keys.
-    # env_file:
-    #   - .env
+      # Schwab OAuth credentials. If a `.env` file exists next to this
+      # compose file, Compose substitutes its values here. If a var is
+      # unset, the container sees an empty string and the Schwab OAuth
+      # routes return 503 with a clear "not configured" message.
+      - SCHWAB_CLIENT_ID=${SCHWAB_CLIENT_ID:-}
+      - SCHWAB_CLIENT_SECRET=${SCHWAB_CLIENT_SECRET:-}
+      - SCHWAB_REDIRECT_URI=${SCHWAB_REDIRECT_URI:-}
+      - SCHWAB_TOKEN_ENCRYPTION_KEY=${SCHWAB_TOKEN_ENCRYPTION_KEY:-}
+    volumes:
+      # Persists encrypted Schwab tokens across rebuilds.
+      - dashboard-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/quote?symbol=SOXL"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
+
+volumes:
+  dashboard-data:

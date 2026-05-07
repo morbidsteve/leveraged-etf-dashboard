@@ -1,0 +1,226 @@
+/**
+ * Schwab Trader API client wrapper. Auto-refreshes the access token before
+ * every call and retries once on 401.
+ */
+
+import { getAccessToken } from './oauth';
+
+const TRADER_BASE = 'https://api.schwabapi.com/trader/v1';
+
+interface RequestOpts {
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  body?: unknown;
+  query?: Record<string, string | number | undefined>;
+}
+
+async function call(path: string, opts: RequestOpts = {}): Promise<unknown> {
+  const token = await getAccessToken();
+  if (!token) {
+    throw new Error('Not connected to Schwab — run OAuth flow first');
+  }
+
+  const qs = opts.query
+    ? '?' +
+      new URLSearchParams(
+        Object.fromEntries(
+          Object.entries(opts.query).filter(([, v]) => v !== undefined).map(
+            ([k, v]) => [k, String(v)]
+          )
+        )
+      ).toString()
+    : '';
+
+  const url = `${TRADER_BASE}${path}${qs}`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/json',
+  };
+  if (opts.body) headers['Content-Type'] = 'application/json';
+
+  const resp = await fetch(url, {
+    method: opts.method ?? 'GET',
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    cache: 'no-store',
+  });
+
+  if (resp.status === 204) return null;
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Schwab API ${resp.status} on ${opts.method ?? 'GET'} ${path}: ${text}`);
+  }
+  // Some endpoints (e.g. order placement) return location header without a JSON body.
+  const contentType = resp.headers.get('content-type') || '';
+  if (!contentType.includes('json')) return null;
+  return await resp.json();
+}
+
+// ── Domain helpers ─────────────────────────────────────────────────────
+
+export interface AccountNumberHash {
+  accountNumber: string;
+  hashValue: string;
+}
+
+export async function getAccountNumbers(): Promise<AccountNumberHash[]> {
+  return (await call('/accounts/accountNumbers')) as AccountNumberHash[];
+}
+
+interface SchwabAccount {
+  securitiesAccount: {
+    accountNumber: string;
+    type: string;
+    currentBalances?: {
+      cashBalance?: number;
+      buyingPower?: number;
+      equity?: number;
+      liquidationValue?: number;
+    };
+    positions?: Array<{
+      instrument: { symbol: string; assetType: string };
+      longQuantity: number;
+      shortQuantity: number;
+      averagePrice?: number;
+      marketValue?: number;
+      currentDayProfitLoss?: number;
+      currentDayProfitLossPercentage?: number;
+    }>;
+  };
+}
+
+export async function getAccount(hash: string, includePositions = true): Promise<SchwabAccount> {
+  return (await call(`/accounts/${encodeURIComponent(hash)}`, {
+    query: includePositions ? { fields: 'positions' } : {},
+  })) as SchwabAccount;
+}
+
+interface SchwabTransaction {
+  activityId: string;
+  time: string;
+  type: string;
+  status: string;
+  netAmount?: number;
+  transferItems?: Array<{
+    instrument?: { symbol?: string };
+    amount?: number;
+    cost?: number;
+    price?: number;
+  }>;
+}
+
+export async function getTransactions(
+  hash: string,
+  opts: { startDate?: string; endDate?: string; types?: string } = {}
+): Promise<SchwabTransaction[]> {
+  return (await call(`/accounts/${encodeURIComponent(hash)}/transactions`, {
+    query: {
+      startDate: opts.startDate,
+      endDate: opts.endDate,
+      types: opts.types ?? 'TRADE',
+    },
+  })) as SchwabTransaction[];
+}
+
+// ── Order placement (kept tight; expanded in Sprint 5) ─────────────────
+
+export interface BuyLimitOrder {
+  symbol: string;
+  shares: number;
+  limitPrice: number;
+  duration?: 'DAY' | 'GOOD_TILL_CANCEL';
+}
+
+export interface SellLimitOrder {
+  symbol: string;
+  shares: number;
+  limitPrice: number;
+  duration?: 'DAY' | 'GOOD_TILL_CANCEL';
+}
+
+export interface SellStopOrder {
+  symbol: string;
+  shares: number;
+  stopPrice: number;
+  duration?: 'DAY' | 'GOOD_TILL_CANCEL';
+}
+
+export function buildBuyLimitOrder(o: BuyLimitOrder) {
+  return {
+    orderType: 'LIMIT',
+    session: 'NORMAL',
+    duration: o.duration ?? 'DAY',
+    orderStrategyType: 'SINGLE',
+    price: Number(o.limitPrice.toFixed(2)),
+    orderLegCollection: [
+      {
+        instruction: 'BUY',
+        quantity: o.shares,
+        instrument: { symbol: o.symbol, assetType: 'EQUITY' },
+      },
+    ],
+  };
+}
+
+export function buildSellLimitOrder(o: SellLimitOrder) {
+  return {
+    orderType: 'LIMIT',
+    session: 'NORMAL',
+    duration: o.duration ?? 'DAY',
+    orderStrategyType: 'SINGLE',
+    price: Number(o.limitPrice.toFixed(2)),
+    orderLegCollection: [
+      {
+        instruction: 'SELL',
+        quantity: o.shares,
+        instrument: { symbol: o.symbol, assetType: 'EQUITY' },
+      },
+    ],
+  };
+}
+
+export function buildSellStopOrder(o: SellStopOrder) {
+  return {
+    orderType: 'STOP',
+    session: 'NORMAL',
+    duration: o.duration ?? 'GOOD_TILL_CANCEL',
+    orderStrategyType: 'SINGLE',
+    stopPrice: Number(o.stopPrice.toFixed(2)),
+    orderLegCollection: [
+      {
+        instruction: 'SELL',
+        quantity: o.shares,
+        instrument: { symbol: o.symbol, assetType: 'EQUITY' },
+      },
+    ],
+  };
+}
+
+/** Submit a built order JSON to Schwab. Returns the orderId from the Location header. */
+export async function placeOrder(hash: string, orderJson: unknown): Promise<string | null> {
+  const token = await getAccessToken();
+  if (!token) throw new Error('Not connected to Schwab');
+
+  const resp = await fetch(
+    `${TRADER_BASE}/accounts/${encodeURIComponent(hash)}/orders`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(orderJson),
+      cache: 'no-store',
+    }
+  );
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Schwab order placement ${resp.status}: ${text}`);
+  }
+  const loc = resp.headers.get('location') || resp.headers.get('Location');
+  if (!loc) return null;
+  // Location: https://api.schwabapi.com/trader/v1/accounts/{hash}/orders/{orderId}
+  const m = loc.match(/orders\/([^/]+)$/);
+  return m ? m[1] : null;
+}
