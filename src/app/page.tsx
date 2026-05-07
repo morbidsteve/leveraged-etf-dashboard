@@ -17,7 +17,7 @@ import {
 } from '@/components/Panels';
 import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useStrategyEngine } from '@/hooks';
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
-import { StrategyConfirmModal, StrategiesPanel, BacktestPanel } from '@/components/Strategy';
+import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
 import { useTradeStore, usePriceStore, useSettingsStore } from '@/store';
 import {
@@ -292,8 +292,9 @@ export default function CommandCenterPage() {
             </div>
           </div>
 
-          {/* Right: day P&L + actions */}
+          {/* Right: kill switch + day P&L + actions */}
           <div className="flex items-center gap-3">
+            <KillSwitch />
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/5">
               <span className="text-[10px] uppercase tracking-widest text-gray-500">
                 Day P&L

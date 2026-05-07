@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useStrategyStore, usePaperStore, usePriceStore } from '@/store';
 import { Strategy, StrategyMode, ConditionTree } from '@/types/strategy';
+import AutoModeConfirmDialog from './AutoModeConfirmDialog';
 import {
   userRsiScalpTemplate,
   userRsiScalpRsiExitTemplate,
@@ -28,6 +29,7 @@ export default function StrategiesPanel() {
 
   const [showNew, setShowNew] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [pendingAutoStrategy, setPendingAutoStrategy] = useState<Strategy | null>(null);
 
   const totalPaperPnL = useMemo(
     () => paperClosed.reduce((s, t) => s + t.realizedPnL, 0),
@@ -222,7 +224,14 @@ export default function StrategiesPanel() {
                   {isExp && (
                     <StrategyDetail
                       strategy={s}
-                      onUpdate={(patch) => updateStrategy(s.id, patch)}
+                      onUpdate={(patch) => {
+                        // Gate switching to auto with a confirmation dialog
+                        if (patch.mode === 'auto' && s.mode !== 'auto') {
+                          setPendingAutoStrategy({ ...s, ...patch });
+                          return;
+                        }
+                        updateStrategy(s.id, patch);
+                      }}
                       onDelete={() => {
                         if (confirm(`Delete strategy "${s.name}"?`)) deleteStrategy(s.id);
                       }}
@@ -234,6 +243,17 @@ export default function StrategiesPanel() {
             );
           })}
         </div>
+      )}
+
+      {pendingAutoStrategy && (
+        <AutoModeConfirmDialog
+          strategy={pendingAutoStrategy}
+          onConfirm={() => {
+            updateStrategy(pendingAutoStrategy.id, { mode: 'auto' });
+            setPendingAutoStrategy(null);
+          }}
+          onCancel={() => setPendingAutoStrategy(null)}
+        />
       )}
     </div>
   );
@@ -272,11 +292,9 @@ function StrategyDetail({
             onChange={(e) => onUpdate({ mode: e.target.value as StrategyMode })}
             className="input w-full text-xs py-1.5"
           >
-            <option value="paper">Paper</option>
-            <option value="manual_confirm">Manual confirm</option>
-            <option value="auto" disabled>
-              Auto (Tier 3 — Schwab)
-            </option>
+            <option value="paper">Paper (virtual fills)</option>
+            <option value="manual_confirm">Manual confirm (clipboard ticket)</option>
+            <option value="auto">Auto (live Schwab orders) — confirms first</option>
           </select>
         </Field>
         <Field label="Shares">

@@ -14,6 +14,7 @@ import {
   StrategyEvent,
 } from '@/types/strategy';
 import { tick } from '@/lib/strategy/evaluator';
+import { dispatchAutoOrder } from '@/lib/strategy/autoExecutor';
 import { calculateRSIWithTimestamps } from '@/lib/rsi';
 import { calculateEMA, calculateSMA } from '@/lib/indicators';
 import { playBuyTone, playSellTone } from '@/lib/sound';
@@ -150,8 +151,41 @@ export function useStrategyEngine(opts: {
           }
         } else if (strategy.mode === 'manual_confirm') {
           opts.onPendingAction?.(action, strategy);
+        } else if (strategy.mode === 'auto') {
+          // Fire-and-forget POST to the server-side place-order route.
+          // Tokens live server-side; the browser only forwards the action.
+          dispatchAutoOrder(action, ctx.price, strategy)
+            .then((result) => {
+              appendEvents([
+                {
+                  strategyId: strategy.id,
+                  timestamp: new Date(),
+                  type: 'fill',
+                  detail: `Schwab order accepted: ${result.action} ${result.shares} ${result.symbol} @ ${
+                    result.submittedPrice?.toFixed(2) ?? '—'
+                  } (orderId ${result.orderId ?? 'n/a'})`,
+                },
+              ]);
+            })
+            .catch((err) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              appendEvents([
+                {
+                  strategyId: strategy.id,
+                  timestamp: new Date(),
+                  type: 'error',
+                  detail: `Schwab order FAILED: ${msg}`,
+                },
+              ]);
+              // Best-effort UI notification — don't trap if blocked.
+              fireNotification({
+                title: `❌ Auto-order failed: ${strategy.ticker}`,
+                body: msg.slice(0, 180),
+                tag: `strat-${strategy.id}-error`,
+                requireInteraction: true,
+              });
+            });
         }
-        // Tier 3: 'auto' mode dispatches to Schwab executor
       }
 
       prevCtxRef.current[strategy.id] = ctx;
