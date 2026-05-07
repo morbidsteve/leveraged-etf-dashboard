@@ -2,8 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import { calculateDCA, formatCurrency, formatPrice, formatShares } from '@/lib/calculations';
+import { computePositionSize } from '@/lib/positionSize';
 import { usePriceData, useStoreHydration } from '@/hooks';
-import { useTradeStore } from '@/store';
+import { useTradeStore, useSettingsStore } from '@/store';
 
 const QUICK_SHARES = [100, 250, 500, 1000];
 
@@ -13,10 +14,23 @@ interface CalculatorPanelProps {
 
 export default function CalculatorPanel({ defaultTicker = 'SOXL' }: CalculatorPanelProps) {
   const storeHydrated = useStoreHydration();
+  const settings = useSettingsStore((s) => s.settings);
+  const updateSettings = useSettingsStore((s) => s.updateSettings);
   const [currentShares, setCurrentShares] = useState<number>(0);
   const [currentAvgCost, setCurrentAvgCost] = useState<number>(0);
   const [newShares, setNewShares] = useState<number>(0);
   const [newPrice, setNewPrice] = useState<number>(0);
+
+  // Position sizing inputs
+  const accountSize = settings.accountSize ?? 50000;
+  const riskPct = settings.defaultRiskPct ?? 1;
+  const [psEntry, setPsEntry] = useState<number>(0);
+  const [psStop, setPsStop] = useState<number>(0);
+
+  const positionSize = useMemo(
+    () => computePositionSize({ accountSize, riskPct, entry: psEntry, stop: psStop }),
+    [accountSize, riskPct, psEntry, psStop]
+  );
 
   const { priceData } = usePriceData({
     ticker: defaultTicker,
@@ -48,6 +62,110 @@ export default function CalculatorPanel({ defaultTicker = 'SOXL' }: CalculatorPa
 
   return (
     <div className="space-y-6">
+      {/* ── Position sizing (risk-driven) ───────────────────────────── */}
+      <div className="card">
+        <div className="card-header flex items-center justify-between">
+          <h2 className="font-medium text-white">Position sizing</h2>
+          <span className="text-[10px] text-gray-500 uppercase tracking-widest">
+            risk-first
+          </span>
+        </div>
+        <div className="card-body space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="label">Account size</label>
+              <input
+                type="number"
+                value={accountSize || ''}
+                onChange={(e) => updateSettings({ accountSize: Number(e.target.value) })}
+                className="input w-full font-mono"
+                placeholder="50000"
+                min={0}
+              />
+            </div>
+            <div>
+              <label className="label">Risk %</label>
+              <input
+                type="number"
+                step="0.1"
+                value={riskPct || ''}
+                onChange={(e) => updateSettings({ defaultRiskPct: Number(e.target.value) })}
+                className="input w-full font-mono"
+                placeholder="1"
+                min={0}
+                max={100}
+              />
+            </div>
+            <div>
+              <label className="label">Entry price</label>
+              <input
+                type="number"
+                step="0.01"
+                value={psEntry || ''}
+                onChange={(e) => setPsEntry(Number(e.target.value))}
+                className="input w-full font-mono"
+                placeholder="$0.00"
+                min={0}
+              />
+            </div>
+            <div>
+              <label className="label">Stop price</label>
+              <input
+                type="number"
+                step="0.01"
+                value={psStop || ''}
+                onChange={(e) => setPsStop(Number(e.target.value))}
+                className="input w-full font-mono"
+                placeholder="$0.00"
+                min={0}
+              />
+            </div>
+          </div>
+
+          {positionSize.isValid ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <SizeStat
+                label="Shares"
+                value={formatShares(positionSize.shares)}
+                accent="accent"
+              />
+              <SizeStat
+                label="Notional"
+                value={formatCurrency(positionSize.notional)}
+                hint={`${positionSize.pctOfAccount.toFixed(1)}% of account`}
+              />
+              <SizeStat
+                label="$ at risk"
+                value={formatCurrency(positionSize.riskDollars)}
+                hint={`${positionSize.stopDistancePct.toFixed(2)}% stop distance`}
+                accent="loss"
+              />
+              <SizeStat
+                label="R:R @ 1.5% / 2%"
+                value={`${positionSize.rrAt15.toFixed(2)} / ${positionSize.rrAt20.toFixed(2)}`}
+                accent="profit"
+              />
+            </div>
+          ) : (
+            <div className="text-xs text-gray-500 px-3 py-2 rounded-lg bg-white/[0.02] border border-white/5">
+              {positionSize.reason ?? 'Enter account, risk %, entry, and stop to size the trade.'}
+            </div>
+          )}
+
+          <p className="text-[10px] text-gray-500 leading-relaxed">
+            Sizing formula:{' '}
+            <code className="font-mono text-gray-400">
+              shares = floor(account × risk% / |entry − stop|)
+            </code>
+            . If the stop fires you lose roughly the configured risk %; if the
+            target hits, the R:R columns tell you the reward multiple. Rounded
+            down to whole shares (Schwab API doesn't support fractional via the
+            order endpoints).
+          </p>
+        </div>
+      </div>
+
+      {/* ── DCA calculator (existing) ───────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
           <div className="card-header">
@@ -359,6 +477,34 @@ export default function CalculatorPanel({ defaultTicker = 'SOXL' }: CalculatorPa
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SizeStat({
+  label,
+  value,
+  hint,
+  accent,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  accent?: 'profit' | 'loss' | 'accent';
+}) {
+  const cls =
+    accent === 'profit'
+      ? 'text-profit'
+      : accent === 'loss'
+      ? 'text-loss'
+      : accent === 'accent'
+      ? 'text-accent-light'
+      : 'text-white';
+  return (
+    <div className="p-3 rounded-lg bg-white/[0.03] border border-white/5">
+      <div className="text-[9px] text-gray-500 uppercase tracking-widest">{label}</div>
+      <div className={`text-lg font-bold font-mono mt-0.5 ${cls}`}>{value}</div>
+      {hint && <div className="text-[10px] text-gray-500 mt-0.5">{hint}</div>}
     </div>
   );
 }

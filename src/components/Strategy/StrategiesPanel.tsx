@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useStrategyStore, usePaperStore, usePriceStore } from '@/store';
-import { Strategy, StrategyMode } from '@/types/strategy';
+import { Strategy, StrategyMode, ConditionTree } from '@/types/strategy';
 import {
   userRsiScalpTemplate,
   userRsiScalpRsiExitTemplate,
@@ -11,6 +11,7 @@ import { describeCondition } from '@/lib/strategy/conditions';
 import { describeState } from '@/lib/strategy/evaluator';
 import { formatCurrency, formatPrice } from '@/lib/calculations';
 import { format } from 'date-fns';
+import ConditionEditor, { blankCustomStrategy } from './ConditionEditor';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
 
@@ -33,12 +34,28 @@ export default function StrategiesPanel() {
     [paperClosed]
   );
 
-  const handleSeed = (variant: 'target' | 'rsi-exit') => {
-    const tpl =
-      variant === 'target'
-        ? userRsiScalpTemplate({ ticker: 'SOXL' })
-        : userRsiScalpRsiExitTemplate({ ticker: 'SOXL' });
-    addStrategy(tpl);
+  const handleSeed = (variant: 'target' | 'rsi-exit' | 'custom') => {
+    if (variant === 'custom') {
+      const blanks = blankCustomStrategy();
+      addStrategy({
+        name: 'Custom strategy',
+        ticker: 'SOXL',
+        enabled: false,
+        mode: 'paper',
+        size: { kind: 'shares', n: 100 },
+        rsiConfig: { period: 250, oversold: 50, overbought: 55 },
+        entry: { when: blanks.entry },
+        exit: { when: blanks.exit },
+        stopLoss: { pct: 1 },
+        cooldownMinutes: 5,
+      });
+    } else {
+      const tpl =
+        variant === 'target'
+          ? userRsiScalpTemplate({ ticker: 'SOXL' })
+          : userRsiScalpRsiExitTemplate({ ticker: 'SOXL' });
+      addStrategy(tpl);
+    }
     setShowNew(false);
   };
 
@@ -92,6 +109,17 @@ export default function StrategiesPanel() {
               <div className="text-xs text-gray-400 mt-1">
                 Same buy. Sell when RSI crosses above 55 instead of a fixed target. Demonstrates
                 non-price exit conditions.
+              </div>
+            </button>
+            <button
+              onClick={() => handleSeed('custom')}
+              className="w-full text-left p-3 rounded-lg border border-accent/30 bg-accent/5 hover:border-accent/60 hover:bg-accent/10 transition"
+            >
+              <div className="font-medium text-accent-light text-sm">Custom — build from scratch</div>
+              <div className="text-xs text-gray-400 mt-1">
+                Seeds the user's RSI 50 / 1.5% target setup, but every condition is editable
+                inline. Compose AND/OR groups, mix indicators (rsi/ema/sma/vwap/price), set
+                relative-to-entry exits, etc.
               </div>
             </button>
             <p className="text-[10px] text-gray-500">
@@ -276,31 +304,65 @@ function StrategyDetail({
       </div>
 
       <div>
-        <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">
-          Entry condition
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-[9px] uppercase tracking-widest text-gray-500">
+            Entry condition
+          </div>
+          <div className="text-[9px] text-gray-600 font-mono italic truncate ml-2 max-w-[60%]">
+            {describeCondition(strategy.entry.when)}
+          </div>
         </div>
-        <div className="font-mono text-gray-200 px-2 py-1.5 rounded bg-white/[0.03] border border-white/5">
-          {describeCondition(strategy.entry.when)}
-        </div>
+        <ConditionEditor
+          value={strategy.entry.when}
+          onChange={(when: ConditionTree) => onUpdate({ entry: { when } })}
+          context="entry"
+        />
       </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-[9px] uppercase tracking-widest text-gray-500">
+            Exit condition
+          </div>
+          <div className="text-[9px] text-gray-600 font-mono italic truncate ml-2 max-w-[60%]">
+            {describeCondition(strategy.exit.when)}
+          </div>
+        </div>
+        <ConditionEditor
+          value={strategy.exit.when}
+          onChange={(when: ConditionTree) => onUpdate({ exit: { when } })}
+          context="exit"
+        />
+      </div>
+
       <div>
         <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">
-          Exit condition
+          Safety stop (% below entry)
         </div>
-        <div className="font-mono text-gray-200 px-2 py-1.5 rounded bg-white/[0.03] border border-white/5">
-          {describeCondition(strategy.exit.when)}
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            step="0.1"
+            min={0}
+            max={50}
+            value={strategy.stopLoss?.pct ?? 0}
+            onChange={(e) => {
+              const pct = Number(e.target.value);
+              if (pct <= 0) {
+                onUpdate({ stopLoss: undefined });
+              } else {
+                onUpdate({ stopLoss: { pct } });
+              }
+            }}
+            className="input w-20 text-xs py-1 font-mono"
+          />
+          <span className="text-[10px] text-gray-500">
+            {strategy.stopLoss?.pct
+              ? `Hard stop at entry × ${(1 - strategy.stopLoss.pct / 100).toFixed(4)} (set 0 to disable)`
+              : 'Disabled — set above 0 to enable a broker-side safety stop'}
+          </span>
         </div>
       </div>
-      {strategy.stopLoss?.pct !== undefined && (
-        <div>
-          <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">
-            Safety stop
-          </div>
-          <div className="font-mono text-gray-200 px-2 py-1.5 rounded bg-white/[0.03] border border-white/5">
-            price {'<'}= entry_price × {(1 - strategy.stopLoss.pct / 100).toFixed(4)}
-          </div>
-        </div>
-      )}
 
       <div>
         <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">

@@ -77,6 +77,7 @@ export default function CommandCenterPage() {
   const addToWatchlist = useSettingsStore((state) => state.addToWatchlist);
   const removeFromWatchlist = useSettingsStore((state) => state.removeFromWatchlist);
   const updateChartSettings = useSettingsStore((state) => state.updateChartSettings);
+  const updateSettings = useSettingsStore((state) => state.updateSettings);
 
   const [selectedTicker, setSelectedTicker] = useState('SOXL');
   const [showAddTicker, setShowAddTicker] = useState(false);
@@ -90,6 +91,11 @@ export default function CommandCenterPage() {
   const chartInterval = storeHydrated ? settings.chartSettings?.interval || '1m' : '1m';
   const chartRange = storeHydrated ? settings.chartSettings?.range || '1d' : '1d';
   const refreshInterval = storeHydrated ? settings.refreshInterval : 1000;
+  const indicators = storeHydrated ? settings.indicators ?? {} : {};
+  const toggleIndicator = (key: 'ema20' | 'ema50' | 'vwap' | 'bollinger') =>
+    updateSettings({
+      indicators: { ...(settings.indicators ?? {}), [key]: !(settings.indicators?.[key] ?? false) },
+    });
 
   // Fetch data for every potential ticker (hooks must be unconditional)
   const tickerHookConfig = (ticker: string) => ({
@@ -433,6 +439,35 @@ export default function CommandCenterPage() {
                     </button>
                   ))}
                 </div>
+                <div className="chip-group" title="Indicator overlays">
+                  <button
+                    onClick={() => toggleIndicator('ema20')}
+                    className={`chip ${indicators.ema20 ? 'active' : ''}`}
+                    style={indicators.ema20 ? { color: '#fb923c' } : undefined}
+                  >
+                    EMA 20
+                  </button>
+                  <button
+                    onClick={() => toggleIndicator('ema50')}
+                    className={`chip ${indicators.ema50 ? 'active' : ''}`}
+                    style={indicators.ema50 ? { color: '#a78bfa' } : undefined}
+                  >
+                    EMA 50
+                  </button>
+                  <button
+                    onClick={() => toggleIndicator('vwap')}
+                    className={`chip ${indicators.vwap ? 'active' : ''}`}
+                    style={indicators.vwap ? { color: '#06b6d4' } : undefined}
+                  >
+                    VWAP
+                  </button>
+                  <button
+                    onClick={() => toggleIndicator('bollinger')}
+                    className={`chip ${indicators.bollinger ? 'active' : ''}`}
+                  >
+                    BB
+                  </button>
+                </div>
               </div>
             </div>
             <div className="p-2">
@@ -448,6 +483,10 @@ export default function CommandCenterPage() {
                     showRSICrossings={true}
                     showOversoldCrossings={true}
                     showOverboughtCrossings={false}
+                    showEMA20={indicators.ema20}
+                    showEMA50={indicators.ema50}
+                    showVWAP={indicators.vwap}
+                    showBollinger={indicators.bollinger}
                   />
                 </div>
               ) : (

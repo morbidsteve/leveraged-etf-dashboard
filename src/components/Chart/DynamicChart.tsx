@@ -25,6 +25,10 @@ interface DynamicChartProps {
   showOverboughtCrossings?: boolean;
   height?: number;
   onCrosshairMove?: (price: number | null, time: Time | null) => void;
+  showEMA20?: boolean;
+  showEMA50?: boolean;
+  showVWAP?: boolean;
+  showBollinger?: boolean;
 }
 
 export default function DynamicChart(props: DynamicChartProps) {

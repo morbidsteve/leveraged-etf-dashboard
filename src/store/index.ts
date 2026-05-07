@@ -339,6 +339,16 @@ export const useSettingsStore = create<SettingsState>()(
           interval: '1m',
           range: '1d',
         },
+        accountSize: 50000,
+        defaultRiskPct: 1,
+        indicators: {
+          ema20: false,
+          ema50: false,
+          sma20: false,
+          vwap: false,
+          bollinger: false,
+          macd: false,
+        },
       },
       _hasHydrated: false,
 

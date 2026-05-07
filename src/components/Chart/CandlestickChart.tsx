@@ -18,6 +18,11 @@ import {
 } from 'lightweight-charts';
 import { Candle, RSIConfig, Trade } from '@/types';
 import { calculateRSIWithTimestamps, DEFAULT_RSI_CONFIG } from '@/lib/rsi';
+import {
+  calculateEMA,
+  calculateVWAP,
+  calculateBollingerBands,
+} from '@/lib/indicators';
 
 interface TradeMarker {
   time: number; // Unix timestamp in seconds
@@ -44,6 +49,11 @@ interface CandlestickChartProps {
   showOverboughtCrossings?: boolean;
   height?: number; // If not provided, uses container height
   onCrosshairMove?: (price: number | null, time: Time | null) => void;
+  // Indicator overlays
+  showEMA20?: boolean;
+  showEMA50?: boolean;
+  showVWAP?: boolean;
+  showBollinger?: boolean;
 }
 
 // Helper to extract trade markers from trades
@@ -156,6 +166,10 @@ export default function CandlestickChart({
   showOverboughtCrossings = true,
   height = 500,
   onCrosshairMove,
+  showEMA20 = false,
+  showEMA50 = false,
+  showVWAP = false,
+  showBollinger = false,
 }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
@@ -171,6 +185,19 @@ export default function CandlestickChart({
   const overboughtLineRef = useRef<ISeriesApi<any> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const oversoldLineRef = useRef<ISeriesApi<any> | null>(null);
+  // Indicator overlay series
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ema20Ref = useRef<ISeriesApi<any> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ema50Ref = useRef<ISeriesApi<any> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const vwapRef = useRef<ISeriesApi<any> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bbUpperRef = useRef<ISeriesApi<any> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bbMiddleRef = useRef<ISeriesApi<any> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bbLowerRef = useRef<ISeriesApi<any> | null>(null);
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -311,6 +338,60 @@ export default function CandlestickChart({
 
     // Create markers plugin for the candlestick series
     markersPluginRef.current = createSeriesMarkers(candlestickSeries, []);
+
+    // ── Indicator overlays (always created; visibility toggled below) ──
+    ema20Ref.current = chart.addSeries(LineSeries, {
+      color: '#fb923c', // orange
+      lineWidth: 2,
+      lineStyle: 0,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      visible: showEMA20,
+      title: 'EMA 20',
+    });
+    ema50Ref.current = chart.addSeries(LineSeries, {
+      color: '#a78bfa', // purple
+      lineWidth: 2,
+      lineStyle: 0,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      visible: showEMA50,
+      title: 'EMA 50',
+    });
+    vwapRef.current = chart.addSeries(LineSeries, {
+      color: '#06b6d4', // cyan
+      lineWidth: 2,
+      lineStyle: 2, // dashed
+      priceLineVisible: false,
+      lastValueVisible: false,
+      visible: showVWAP,
+      title: 'VWAP',
+    });
+    bbUpperRef.current = chart.addSeries(LineSeries, {
+      color: 'rgba(156, 163, 175, 0.7)',
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      visible: showBollinger,
+      title: 'BB upper',
+    });
+    bbMiddleRef.current = chart.addSeries(LineSeries, {
+      color: 'rgba(156, 163, 175, 0.5)',
+      lineWidth: 1,
+      lineStyle: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      visible: showBollinger,
+      title: 'BB mid',
+    });
+    bbLowerRef.current = chart.addSeries(LineSeries, {
+      color: 'rgba(156, 163, 175, 0.7)',
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      visible: showBollinger,
+      title: 'BB lower',
+    });
 
     // Add volume series
     if (showVolume) {
@@ -564,6 +645,42 @@ export default function CandlestickChart({
 
       volumeSeriesRef.current.setData(volumeData);
     }
+
+    // ── Indicator data updates (compute only when visible) ─────────────
+    if (showEMA20 && ema20Ref.current) {
+      const data = calculateEMA(candles, 20).map((p) => ({
+        time: p.time as Time,
+        value: p.value,
+      }));
+      ema20Ref.current.setData(data);
+    }
+    if (showEMA50 && ema50Ref.current) {
+      const data = calculateEMA(candles, 50).map((p) => ({
+        time: p.time as Time,
+        value: p.value,
+      }));
+      ema50Ref.current.setData(data);
+    }
+    if (showVWAP && vwapRef.current) {
+      const data = calculateVWAP(candles).map((p) => ({
+        time: p.time as Time,
+        value: p.value,
+      }));
+      vwapRef.current.setData(data);
+    }
+    if (showBollinger && bbUpperRef.current && bbMiddleRef.current && bbLowerRef.current) {
+      const bb = calculateBollingerBands(candles, 20, 2);
+      bbUpperRef.current.setData(bb.map((p) => ({ time: p.time as Time, value: p.upper })));
+      bbMiddleRef.current.setData(bb.map((p) => ({ time: p.time as Time, value: p.middle })));
+      bbLowerRef.current.setData(bb.map((p) => ({ time: p.time as Time, value: p.lower })));
+    }
+    // Toggle visibility live (so flipping a chip doesn't require a full chart rebuild)
+    ema20Ref.current?.applyOptions({ visible: showEMA20 });
+    ema50Ref.current?.applyOptions({ visible: showEMA50 });
+    vwapRef.current?.applyOptions({ visible: showVWAP });
+    bbUpperRef.current?.applyOptions({ visible: showBollinger });
+    bbMiddleRef.current?.applyOptions({ visible: showBollinger });
+    bbLowerRef.current?.applyOptions({ visible: showBollinger });
 
     // Calculate RSI data (needed for both RSI chart and crossing markers)
     const rsiData = calculateRSIWithTimestamps(candles, rsiConfig.period);

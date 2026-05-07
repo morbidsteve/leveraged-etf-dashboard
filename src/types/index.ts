@@ -199,6 +199,18 @@ export interface AppSettings {
     interval: '1m' | '5m' | '15m' | '1h' | '1d';
     range: '1d' | '5d' | '1mo' | '3mo';
   };
+  // Position-sizing inputs (persisted, not real account auth)
+  accountSize?: number;
+  defaultRiskPct?: number;
+  // Chart indicator visibility toggles
+  indicators?: {
+    ema20?: boolean;
+    ema50?: boolean;
+    sma20?: boolean;
+    vwap?: boolean;
+    bollinger?: boolean;
+    macd?: boolean;
+  };
 }
 
 // API response types
