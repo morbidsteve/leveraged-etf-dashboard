@@ -5,7 +5,7 @@ import { MainLayout, Drawer } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { OpenPositions } from '@/components/Dashboard';
+import { OpenPositions, SignalRadar } from '@/components/Dashboard';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -17,7 +17,7 @@ import {
 } from '@/components/Panels';
 import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useStrategyEngine } from '@/hooks';
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
-import { StrategyConfirmModal, StrategiesPanel } from '@/components/Strategy';
+import { StrategyConfirmModal, StrategiesPanel, BacktestPanel } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
 import { useTradeStore, usePriceStore, useSettingsStore } from '@/store';
 import {
@@ -54,7 +54,8 @@ type DrawerView =
   | 'alerts'
   | 'settings'
   | 'newTrade'
-  | 'strategies';
+  | 'strategies'
+  | 'backtest';
 
 const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle: string }> = {
   trades: { title: 'Trade History', subtitle: 'All open and closed trades' },
@@ -65,6 +66,7 @@ const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle
   settings: { title: 'Settings', subtitle: 'Strategy & preferences' },
   newTrade: { title: 'New Trade', subtitle: 'Log a position' },
   strategies: { title: 'Strategies', subtitle: 'Composable buy/sell rules engine' },
+  backtest: { title: 'Backtest', subtitle: 'Validate a strategy on historical data' },
 };
 
 export default function CommandCenterPage() {
@@ -193,6 +195,23 @@ export default function CommandCenterPage() {
     };
   });
 
+  // Radar items include candles for the sparkline rendering
+  const radarItems = watchlist.map((ticker) => {
+    const data = tickerDataMap[ticker] || {
+      priceData: null,
+      rsiData: null,
+      candles: [],
+      isLoading: true,
+    };
+    return {
+      ticker,
+      priceData: data.priceData,
+      rsiData: data.rsiData,
+      candles: data.candles ?? [],
+      isLoading: data.isLoading,
+    };
+  });
+
   const handleAddTicker = useCallback(() => {
     if (newTicker.trim()) {
       addToWatchlist(newTicker.trim());
@@ -302,6 +321,25 @@ export default function CommandCenterPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* SIGNAL RADAR */}
+      <div className="px-4 lg:px-6 pt-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+            Signal radar · all watchlist
+          </h2>
+          <span className="text-[10px] text-gray-600 uppercase tracking-widest">
+            BUY/SELL float to top
+          </span>
+        </div>
+        <SignalRadar
+          items={radarItems}
+          selectedTicker={selectedTicker}
+          onSelect={setSelectedTicker}
+          oversold={rsiConfig.oversold}
+          overbought={rsiConfig.overbought}
+        />
       </div>
 
       {/* MAIN GRID */}
@@ -483,8 +521,9 @@ export default function CommandCenterPage() {
           </div>
 
           {/* Quick action launchpad */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
             <ActionTile icon="strategies" label="Strategies" onClick={() => setDrawer('strategies')} highlight />
+            <ActionTile icon="backtest" label="Backtest" onClick={() => setDrawer('backtest')} highlight />
             <ActionTile icon="trades" label="Trades" onClick={() => setDrawer('trades')} />
             <ActionTile icon="analytics" label="Analytics" onClick={() => setDrawer('analytics')} />
             <ActionTile icon="scanner" label="Scanner" onClick={() => setDrawer('scanner')} />
@@ -527,9 +566,10 @@ export default function CommandCenterPage() {
         onClose={() => setDrawer(null)}
         title={drawerInfo?.title}
         subtitle={drawerInfo?.subtitle}
-        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' || drawer === 'strategies' ? 'xl' : 'lg'}
+        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' || drawer === 'strategies' || drawer === 'backtest' ? 'xl' : 'lg'}
       >
         {drawer === 'strategies' && <StrategiesPanel />}
+        {drawer === 'backtest' && <BacktestPanel />}
         {drawer === 'trades' && <TradesPanel />}
         {drawer === 'analytics' && <AnalyticsPanel />}
         {drawer === 'scanner' && <ScannerPanel />}
@@ -785,7 +825,7 @@ function ActionTile({
   onClick,
   highlight,
 }: {
-  icon: 'strategies' | 'trades' | 'analytics' | 'scanner' | 'calc' | 'alerts' | 'settings';
+  icon: 'strategies' | 'backtest' | 'trades' | 'analytics' | 'scanner' | 'calc' | 'alerts' | 'settings';
   label: string;
   onClick: () => void;
   highlight?: boolean;
@@ -794,6 +834,11 @@ function ActionTile({
     strategies: (
       <>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </>
+    ),
+    backtest: (
+      <>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12a9 9 0 1018 0 9 9 0 00-18 0zM12 6v6l4 2" />
       </>
     ),
     trades: (
