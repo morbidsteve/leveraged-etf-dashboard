@@ -18,16 +18,21 @@ strategy "RSI scalp on SOXL"
   size: 1% of account risk
 
   ON ENTRY when rsi(period=250) crosses_below 50
-    -> buy market
+    -> place BUY LIMIT (marketable: ask + $0.05)
 
   ON EXIT when price >= entry_price * 1.015
-    -> sell market   # the +1.5% target
+    -> place SELL LIMIT at entry_price * 1.015   # rests at broker, fills at target
 
-  ON STOP when price <= entry_price * 0.99
-    -> sell market
+  SAFETY STOP at entry_price * 0.99
+    -> broker-side SELL STOP (engine-independent safety net)
 
   COOLDOWN 5 minutes after exit
 ```
+
+(Engine watches conditions and places discrete orders — exactly the model the
+user described. The safety stop is the only broker-managed leg, and it's there
+purely to protect the position if our engine goes offline. Everything else
+flows through the same evaluator that powers paper mode and backtests.)
 
 Once that exists, the trader composes more strategies (RSI cross + VWAP support, RSI cross with confirmation candle, etc.) and runs many in parallel across different tickers — manually-confirmed at first, fully automatic once trust is built.
 
@@ -347,6 +352,19 @@ Examples that require new condition types:
 
 > Strategies graduate from `manual_confirm` to `auto` mode. **Highest-risk tier** — extra care on guardrails.
 
+### ThinkOrSwim API: doesn't exist as a separate thing
+
+Worth surfacing because it's an obvious question: **ThinkOrSwim does not have its own external API.** Some history:
+
+- TD Ameritrade had a real, well-loved API. Schwab acquired TD Ameritrade and **shut down the TDA API on 2024-05-10.**
+- ThinkOrSwim is now just a Schwab frontend. Its API *is* the Schwab Trader API documented above.
+- ToS's internal scripting language is **ThinkScript** — it can drive in-app alerts, study-based auto-orders, and watchlist columns, but it runs only inside the ToS desktop app. It cannot reach external data sources or be called by external code.
+- Some traders glue ToS alerts → email → external webhook → broker API to fake an integration, but it's brittle and we don't need it: we'll talk to Schwab's REST + WebSocket APIs directly.
+
+**Bottom line: anywhere the roadmap says "Schwab," that includes ToS-enabled accounts. There's nothing extra to integrate on the ToS side.** Sources: [TD Ameritrade API Status After Schwab Merger (TradersPost)](https://blog.traderspost.io/article/does-td-ameritrade-have-api), [thinkorswim API Integration overview (Itexus)](https://itexus.com/thinkorswim-api-integration-dive-into-automated-trading/), [API Trading w/ ThinkOrSwim community thread (useThinkScript)](https://usethinkscript.com/threads/api-trading-w-thinkorswim.8861/).
+
+---
+
 ### Schwab API research findings (verified 2026-05-07)
 
 Before committing engineering effort to Tier 3, I researched the Schwab developer docs + community references. Summary of what's confirmed:
@@ -451,29 +469,68 @@ Before committing engineering effort to Tier 3, I researched the Schwab develope
 
 ---
 
-### 3.4  Bracket orders via TRIGGER + OCO composition · **M**
+### 3.4  Execution architecture: signal-driven discrete orders (with optional broker-side stop)
 
-**Goal:** when the entry fills, target + stop go in *immediately* as broker-side orders. Even if dashboard crashes or wifi dies, Schwab holds the safety net.
+**This section locks in a key design decision** — based on the user's clarification: *"what we're building would be what's finding the RSI condition or other conditions, and then when it's met, then put in the buy limit order, and then when the sell condition is met, put in a sell limit order."*
 
-**Why this matters:** Schwab API doesn't have a single "bracket" primitive — but it has `OCO` (one-cancels-other) and `TRIGGER` (one-triggers-other) strategy types. The standard idiom is:
+That's the right model. It's strictly more flexible than a bracket order. Here's how it works and why it wins:
+
+#### The lifecycle
 
 ```
-TRIGGER {
-  entry: BUY MARKET 125 SOXL
-  triggers: OCO {
-    target: SELL LIMIT 125 SOXL @ entry × 1.015
-    stop:   SELL STOP   125 SOXL @ entry × 0.99
-  }
-}
+1. Engine watches data tick-by-tick.
+2. ENTRY condition fires (e.g., RSI(250) crosses below 50)
+   → Engine places BUY LIMIT for N shares at "marketable" price
+     (current ask + small buffer, so it fills almost immediately
+     but caps the worst-case fill price)
+   → Engine optionally submits a BROKER-SIDE STOP LOSS as a safety net
+     (independent order; protects if our app crashes)
+3. Engine polls/streams the order; on FILL, records entry_price.
+4. Engine now watches EXIT conditions.
+5. EXIT condition fires (e.g., price >= entry × 1.015, OR RSI crosses 55)
+   → Engine places SELL LIMIT
+     - If the exit is a price target → place a RESTING SELL LIMIT at the target
+       price. It sits at Schwab; fills when price reaches it. Even if our app
+       dies, the limit still fills.
+     - If the exit is a non-price condition (RSI, time-of-day) → place a
+       MARKETABLE SELL LIMIT at current bid − small buffer, so it fills now.
+6. On SELL fill, cancel any safety-net stop loss. Trade is closed.
+   Engine enters cooldown.
 ```
 
-Once submitted, Schwab handles the rest server-side. Our local engine just listens for fill events.
+#### Why this beats a single bracket order (TRIGGER+OCO)
 
-**Build:**
-- `buildBracketOrder(strategy, fillPrice)` helper that emits the TRIGGER+OCO JSON
-- Wire into the strategy evaluator: when `mode === 'auto'` and entry condition fires, build + submit the bracket; transition strategy state to `IN_POSITION_BROKER_MANAGED`
-- Listen for Schwab account-activity stream (Tier 5.1, now folded into Tier 3) to detect fills
-- Reconcile: if for any reason the bracket fails to submit after entry fills, the engine alerts loudly + offers to submit manually
+- **Sell conditions can be anything.** "Sell when RSI crosses above 55" or "sell after 30 minutes if not at target" — Schwab's OCO can't evaluate those server-side. Our engine can.
+- **The strategy DSL stays uniform.** Entry conditions and exit conditions use the same condition language and the same evaluator. No special-casing for "is this exit reducible to a price-target so I can use OCO?"
+- **Each placed order is a normal Schwab limit order.** No nested composite-order JSON, much simpler to test and debug.
+- **The optional broker-side stop covers the only real risk** of this model — that our engine dies after entry but before the sell condition fires. With a hard stop at the broker, that scenario is bounded.
+
+#### "Marketable limit" pattern (used for entries and signal-based exits)
+
+A market order on a leveraged ETF can fill terribly during volatile ticks. Instead, when the engine wants to "buy now":
+
+1. Read current ask (from the live stream).
+2. Place a BUY LIMIT at `ask + $0.05` (or 0.1% — configurable buffer).
+3. The order is *marketable* (limit ≥ ask), so it fills at the inside price almost always.
+4. Worst case: it fills at `ask + buffer`. We never get burned by a spike.
+
+For signal-based sells (RSI cross, time exit, etc.), same pattern in reverse: SELL LIMIT at `bid − buffer`.
+
+For target-based sells, a different pattern: just a **resting limit** at the exact target price. No buffer; we want to fill at exactly the target.
+
+#### Build
+
+- `src/lib/strategy/executor.ts` — translates an `Action` from the evaluator into the right Schwab order JSON (marketable buy limit, resting sell limit at target, marketable sell limit on signal). Pure function; testable.
+- `src/lib/schwab/orders.ts` — thin wrappers around `POST /accounts/{hash}/orders`, `DELETE /accounts/{hash}/orders/{id}`, `GET /accounts/{hash}/orders/{id}` for placement, cancellation, and status.
+- `useStrategyEngine` orchestrates: evaluator says "place buy" → executor builds JSON → schwab/orders submits → engine tracks the orderId, listens for fill on the streamer, transitions state to `IN_POSITION` only after confirmed fill.
+- **Optional safety net** (per-strategy toggle, default ON): when entry fills, also submit a SELL STOP at `entry × (1 - safetyStopPct)` (default 1% below entry). This is broker-managed, no engine dependency. Cancel when our exit completes.
+
+#### Acceptance
+
+- [ ] Strategy with target exit (`price >= entry × 1.015`) places a buy on signal; on buy fill, immediately places a resting sell limit at the target. Whole flow ends with a clean fill, P&L logged.
+- [ ] Strategy with non-price exit (`rsi crosses_above 55`) places a buy on signal; on RSI cross above 55, cancels nothing-pending and places a marketable sell limit. Fills, P&L logged.
+- [ ] Safety-net stop loss is visible in Schwab's order book during the position; auto-cancels on exit.
+- [ ] Engine tested by killing it after entry fill — the safety stop still fires correctly when price drops 1%, even though our app is offline.
 
 ---
 
