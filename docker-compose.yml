@@ -19,6 +19,11 @@ services:
       - SCHWAB_CLIENT_SECRET=${SCHWAB_CLIENT_SECRET:-}
       - SCHWAB_REDIRECT_URI=${SCHWAB_REDIRECT_URI:-}
       - SCHWAB_TOKEN_ENCRYPTION_KEY=${SCHWAB_TOKEN_ENCRYPTION_KEY:-}
+      - SCHWAB_ACCOUNT_HASH=${SCHWAB_ACCOUNT_HASH:-}
+      # Server-side order guardrails (defense in depth)
+      - SCHWAB_MAX_ORDER_NOTIONAL=${SCHWAB_MAX_ORDER_NOTIONAL:-}
+      - SCHWAB_MAX_ORDERS_PER_DAY=${SCHWAB_MAX_ORDERS_PER_DAY:-}
+      - SCHWAB_SYMBOL_ALLOWLIST=${SCHWAB_SYMBOL_ALLOWLIST:-}
     volumes:
       # Persists encrypted Schwab tokens across rebuilds.
       - dashboard-data:/app/data

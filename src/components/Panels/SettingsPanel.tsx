@@ -1,15 +1,20 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import { useSettingsStore, useTradeStore, DEFAULT_SCANNER_SETTINGS } from '@/store';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 import { Trade } from '@/types';
 import { SchwabConnectCard } from '@/components/Strategy';
+import { downloadBundle, applyBundle } from '@/lib/exportImport';
 
 export default function SettingsPanel() {
   const { settings, updateSettings, updateRSIConfig, updateScannerSettings } =
     useSettingsStore();
   const scannerSettings = settings.scannerSettings || DEFAULT_SCANNER_SETTINGS;
   const trades = useTradeStore((state) => state.trades);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
 
   const handleExportTrades = () => {
     const csv = generateTradeCSV(trades);
@@ -20,6 +25,47 @@ export default function SettingsPanel() {
     a.download = `trades-export-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportAll = () => {
+    downloadBundle();
+  };
+
+  const handleImportPick = () => {
+    setImportStatus(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const bundle = JSON.parse(text);
+      if (
+        !confirm(
+          'Importing will OVERWRITE your current trades, strategies, paper history, alerts, and settings with the contents of this backup. Continue?'
+        )
+      ) {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      const result = applyBundle(bundle);
+      if (!result.ok) {
+        setImportStatus(`Import failed: ${result.reason}`);
+        return;
+      }
+      setImportStatus(
+        `Imported ${result.keysWritten.length} stores. Reloading…`
+      );
+      setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      setImportStatus(
+        `Import failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleClearAllData = () => {
@@ -258,25 +304,68 @@ export default function SettingsPanel() {
 
       <div className="card">
         <div className="card-header">
-          <h2 className="font-medium text-white">Data Management</h2>
+          <h2 className="font-medium text-white">Data management</h2>
         </div>
         <div className="card-body space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-medium text-white text-sm">Export Trades</div>
-              <div className="text-xs text-gray-500">CSV ({trades.length} trades)</div>
+              <div className="font-medium text-white text-sm">Export trades (CSV)</div>
+              <div className="text-xs text-gray-500">{trades.length} trades</div>
             </div>
-            <button onClick={handleExportTrades} className="btn btn-primary">
+            <button onClick={handleExportTrades} className="btn btn-outline text-sm">
               Export CSV
             </button>
           </div>
+
+          <div className="border-t border-white/5 pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="font-medium text-white text-sm">Full backup (JSON)</div>
+                <div className="text-xs text-gray-500">
+                  Trades · strategies · paper history · alerts · settings. Local only.
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={handleExportAll} className="btn btn-primary text-sm">
+                  Export all
+                </button>
+                <button onClick={handleImportPick} className="btn btn-outline text-sm">
+                  Import…
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/json"
+                  className="hidden"
+                  onChange={handleImportFile}
+                />
+              </div>
+            </div>
+            {importStatus && (
+              <div
+                className={`text-[11px] mt-1 ${
+                  importStatus.startsWith('Imported')
+                    ? 'text-profit'
+                    : 'text-loss'
+                }`}
+              >
+                {importStatus}
+              </div>
+            )}
+            <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">
+              Backup file lands in your Downloads. To migrate: export here, copy file to the new
+              device, open this dashboard there, click Import. No cloud, no third-party storage.
+              Schwab tokens are NOT in the bundle (those live encrypted on the host).
+            </p>
+          </div>
+
           <div className="border-t border-white/5 pt-4 flex items-center justify-between">
             <div>
-              <div className="font-medium text-loss text-sm">Clear All Data</div>
-              <div className="text-xs text-gray-500">Delete trades + settings</div>
+              <div className="font-medium text-loss text-sm">Clear all data</div>
+              <div className="text-xs text-gray-500">Delete trades + settings + paper history</div>
             </div>
-            <button onClick={handleClearAllData} className="btn btn-danger">
-              Clear Data
+            <button onClick={handleClearAllData} className="btn btn-danger text-sm">
+              Clear data
             </button>
           </div>
         </div>

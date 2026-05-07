@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStrategyStore } from '@/store';
 import { BacktestResult, BacktestTrade } from '@/lib/strategy/backtest';
 import { describeCondition } from '@/lib/strategy/conditions';
@@ -351,6 +351,9 @@ function BacktestResultView({ result }: { result: BacktestResult }) {
         </div>
       </div>
 
+      {/* Replay */}
+      <ReplayCard result={result} />
+
       {/* Trade list */}
       <div className="card">
         <div className="card-header">
@@ -494,6 +497,246 @@ function EquityCurve({ curve }: { curve: BacktestResult['equityCurve'] }) {
       <line x1="0" x2={w} y1={zeroY} y2={zeroY} stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
       <path d={bhPath} fill="none" stroke="rgba(155,163,180,0.5)" strokeWidth="1.5" />
       <path d={stratPath} fill="none" stroke="#22c55e" strokeWidth="2" />
+    </svg>
+  );
+}
+
+// ─── Replay ───────────────────────────────────────────────────────────────
+
+const SPEEDS = [
+  { label: '0.5×', barsPerTick: 1, intervalMs: 400 },
+  { label: '1×', barsPerTick: 1, intervalMs: 200 },
+  { label: '2×', barsPerTick: 1, intervalMs: 100 },
+  { label: '5×', barsPerTick: 5, intervalMs: 100 },
+  { label: '10×', barsPerTick: 10, intervalMs: 100 },
+];
+
+function ReplayCard({ result }: { result: BacktestResult }) {
+  const { equityCurve, trades } = result;
+  const total = equityCurve.length;
+  const [bar, setBar] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [speedIdx, setSpeedIdx] = useState(1);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Auto-advance
+  useEffect(() => {
+    if (!playing || total === 0) return;
+    const speed = SPEEDS[speedIdx];
+    intervalRef.current = setInterval(() => {
+      setBar((b) => {
+        const next = b + speed.barsPerTick;
+        if (next >= total - 1) {
+          setPlaying(false);
+          return total - 1;
+        }
+        return next;
+      });
+    }, speed.intervalMs);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [playing, speedIdx, total]);
+
+  // Keep bar in bounds when result changes
+  useEffect(() => {
+    if (bar > total - 1) setBar(Math.max(0, total - 1));
+  }, [total, bar]);
+
+  if (total === 0) return null;
+
+  const point = equityCurve[bar];
+  const upToNow = equityCurve.slice(0, bar + 1);
+  const tradesUpToNow = trades.filter((t) => new Date(t.exitAt).getTime() <= point.time * 1000);
+  const lastClosed = tradesUpToNow[tradesUpToNow.length - 1];
+  const inProgress = trades.find(
+    (t) =>
+      new Date(t.entryAt).getTime() <= point.time * 1000 &&
+      new Date(t.exitAt).getTime() > point.time * 1000
+  );
+
+  const winsUpToNow = tradesUpToNow.filter((t) => t.realizedPnL > 0).length;
+  const winRate = tradesUpToNow.length > 0 ? (winsUpToNow / tradesUpToNow.length) * 100 : 0;
+
+  return (
+    <div className="card">
+      <div className="card-header flex items-center justify-between flex-wrap gap-2">
+        <h3 className="font-medium text-white text-sm">Replay · scrub bar-by-bar</h3>
+        <div className="text-[10px] text-gray-500">
+          Bar {bar + 1} of {total} ·{' '}
+          <span className="font-mono">{format(new Date(point.time * 1000), 'MMM dd HH:mm')}</span>
+        </div>
+      </div>
+      <div className="card-body space-y-3">
+        {/* Per-bar stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <ReplayStat
+            label="Cumulative P&L"
+            value={formatCurrency(point.cumulativePnL)}
+            tone={point.cumulativePnL >= 0 ? 'profit' : 'loss'}
+          />
+          <ReplayStat label="Closed trades" value={`${tradesUpToNow.length}`} />
+          <ReplayStat
+            label="Win rate"
+            value={`${winRate.toFixed(0)}%`}
+            tone={winRate >= 50 ? 'profit' : 'loss'}
+          />
+          <ReplayStat
+            label="Buy & hold"
+            value={formatCurrency(point.buyHoldEquity)}
+          />
+        </div>
+
+        {/* In-progress / last-closed indicator */}
+        {inProgress ? (
+          <div className="rounded-lg p-2 bg-accent/10 border border-accent/30 text-xs">
+            <div className="text-[10px] uppercase tracking-widest text-accent-light mb-0.5">
+              In position
+            </div>
+            <div className="font-mono">
+              Entered @ {formatPrice(inProgress.entryPrice)} on{' '}
+              {format(new Date(inProgress.entryAt), 'MMM dd HH:mm')} · {inProgress.shares} sh
+            </div>
+          </div>
+        ) : lastClosed ? (
+          <div
+            className={`rounded-lg p-2 border text-xs ${
+              lastClosed.realizedPnL >= 0
+                ? 'border-profit/30 bg-profit/5'
+                : 'border-loss/30 bg-loss/5'
+            }`}
+          >
+            <div className="text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">
+              Last closed trade
+            </div>
+            <div className="font-mono">
+              #{lastClosed.id + 1} · {formatPrice(lastClosed.entryPrice)} →{' '}
+              {formatPrice(lastClosed.exitPrice)} ·{' '}
+              <span className={lastClosed.realizedPnL >= 0 ? 'text-profit' : 'text-loss'}>
+                {formatCurrency(lastClosed.realizedPnL)}
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Equity curve up to current bar */}
+        <PartialEquityCurve full={equityCurve} cursor={bar} />
+
+        {/* Slider + transport */}
+        <div className="space-y-2">
+          <input
+            type="range"
+            min={0}
+            max={total - 1}
+            value={bar}
+            onChange={(e) => {
+              setPlaying(false);
+              setBar(Number(e.target.value));
+            }}
+            className="w-full accent-accent-light"
+          />
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  setPlaying(false);
+                  setBar(0);
+                }}
+                className="btn btn-ghost text-xs px-2 py-1"
+                title="Rewind"
+              >
+                ⏮
+              </button>
+              <button
+                onClick={() => setPlaying((p) => !p)}
+                className={`btn text-xs px-3 py-1 ${
+                  playing ? 'btn-outline' : 'btn-primary'
+                }`}
+              >
+                {playing ? '⏸ Pause' : '▶ Play'}
+              </button>
+              <button
+                onClick={() => {
+                  setPlaying(false);
+                  setBar(total - 1);
+                }}
+                className="btn btn-ghost text-xs px-2 py-1"
+                title="Skip to end"
+              >
+                ⏭
+              </button>
+            </div>
+            <div className="chip-group">
+              {SPEEDS.map((sp, i) => (
+                <button
+                  key={sp.label}
+                  onClick={() => setSpeedIdx(i)}
+                  className={`chip ${speedIdx === i ? 'active-accent' : ''}`}
+                >
+                  {sp.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReplayStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: 'profit' | 'loss';
+}) {
+  const cls = tone === 'profit' ? 'text-profit' : tone === 'loss' ? 'text-loss' : 'text-white';
+  return (
+    <div className="p-2 rounded bg-white/[0.03] border border-white/5">
+      <div className="text-[9px] uppercase tracking-widest text-gray-500">{label}</div>
+      <div className={`font-mono font-bold text-sm mt-0.5 ${cls}`}>{value}</div>
+    </div>
+  );
+}
+
+function PartialEquityCurve({
+  full,
+  cursor,
+}: {
+  full: BacktestResult['equityCurve'];
+  cursor: number;
+}) {
+  if (full.length === 0) return null;
+  const w = 800;
+  const h = 100;
+  const xs = full.map((_, i) => (i / Math.max(1, full.length - 1)) * w);
+  const min = Math.min(...full.map((p) => p.cumulativePnL), 0);
+  const max = Math.max(...full.map((p) => p.cumulativePnL), 0);
+  const range = max - min || 1;
+  const ys = full.map((p) => h - ((p.cumulativePnL - min) / range) * h);
+
+  // Past portion (drawn) + future portion (faded)
+  const pastPath = xs
+    .slice(0, cursor + 1)
+    .map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${ys[i].toFixed(1)}`)
+    .join(' ');
+  const futurePath = xs
+    .slice(cursor)
+    .map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${ys[i + cursor].toFixed(1)}`)
+    .join(' ');
+  const cursorX = xs[cursor];
+  const zeroY = h - ((0 - min) / range) * h;
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-24" role="img">
+      <line x1="0" x2={w} y1={zeroY} y2={zeroY} stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
+      <path d={futurePath} fill="none" stroke="rgba(34, 197, 94, 0.18)" strokeWidth="1.5" />
+      <path d={pastPath} fill="none" stroke="#22c55e" strokeWidth="2" />
+      <line x1={cursorX} x2={cursorX} y1={0} y2={h} stroke="rgba(167, 139, 250, 0.6)" strokeWidth="1" />
+      <circle cx={cursorX} cy={ys[cursor]} r="3.5" fill="#a78bfa" />
     </svg>
   );
 }

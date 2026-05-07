@@ -6,6 +6,7 @@ import {
   placeOrder,
 } from '@/lib/schwab/client';
 import { getActiveAccountHash } from '@/lib/schwab/account';
+import { checkGuardrails, recordAudit } from '@/lib/schwab/orderGuardrails';
 
 interface PlaceOrderBody {
   // The action shape from the strategy engine:
@@ -35,6 +36,35 @@ export async function POST(request: NextRequest) {
   }
 
   const buffer = (body.bufferPct ?? 0.2) / 100; // default 0.2%
+
+  // Server-side guardrails — runs BEFORE auth/account resolution so we
+  // never even hit Schwab if the order is over a configured cap.
+  const estimatedPrice =
+    body.action === 'enter' || body.action === 'exit_signal'
+      ? body.livePrice ?? 0
+      : body.limitPrice ?? body.livePrice ?? 0;
+  const guard = await checkGuardrails({
+    symbol: body.symbol,
+    shares: body.shares,
+    estimatedPrice,
+  });
+  if (!guard.allow) {
+    await recordAudit({
+      outcome: 'rejected',
+      symbol: body.symbol,
+      shares: body.shares,
+      estimatedPrice,
+      reason: guard.reason,
+    });
+    return NextResponse.json(
+      {
+        error: `Server guardrail rejected order: ${guard.reason}`,
+        guardConfig: guard.config,
+        ordersToday: guard.ordersToday,
+      },
+      { status: 403 }
+    );
+  }
 
   try {
     const hash = await getActiveAccountHash();
@@ -94,7 +124,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const orderId = await placeOrder(hash, order);
+    let orderId: string | null = null;
+    try {
+      orderId = await placeOrder(hash, order);
+      await recordAudit({
+        outcome: 'submitted',
+        symbol: body.symbol,
+        shares: body.shares,
+        estimatedPrice: submittedPrice,
+        orderId: orderId ?? undefined,
+      });
+    } catch (placeErr) {
+      await recordAudit({
+        outcome: 'failed',
+        symbol: body.symbol,
+        shares: body.shares,
+        estimatedPrice: submittedPrice,
+        reason: placeErr instanceof Error ? placeErr.message.slice(0, 200) : String(placeErr).slice(0, 200),
+      });
+      throw placeErr;
+    }
 
     return NextResponse.json({
       orderId,
@@ -102,6 +151,7 @@ export async function POST(request: NextRequest) {
       action: body.action,
       symbol: body.symbol,
       shares: body.shares,
+      ordersToday: guard.ordersToday + 1,
     });
   } catch (e) {
     return NextResponse.json(
