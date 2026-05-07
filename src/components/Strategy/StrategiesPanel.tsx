@@ -14,6 +14,7 @@ import { formatCurrency, formatPrice } from '@/lib/calculations';
 import { format } from 'date-fns';
 import ConditionEditor, { blankCustomStrategy } from './ConditionEditor';
 import { buildShareUrl, consumeIncomingStrategy, shareableToAddInput } from '@/lib/strategy/share';
+import { EmptyState } from '@/components/UI';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
 
@@ -199,10 +200,17 @@ export default function StrategiesPanel() {
       )}
 
       {strategies.length === 0 ? (
-        <div className="card card-body text-center py-12 text-gray-500">
-          <p className="mb-2">No strategies yet</p>
-          <p className="text-xs">Click <strong className="text-white">+ New Strategy</strong> to seed one from a template.</p>
-        </div>
+        <EmptyState
+          icon="strategies"
+          title="No strategies yet"
+          description={
+            <>
+              Strategies turn the dashboard into an autopilot. Start with a template — the
+              defaults match the user's RSI(250) / 50 / 55 setup. Always start in <strong className="text-white">paper mode</strong> to validate before trading real money.
+            </>
+          }
+          primaryCta={{ label: '+ New strategy', onClick: () => setShowNew(true) }}
+        />
       ) : (
         <div className="space-y-3">
           {strategies.map((s) => {

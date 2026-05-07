@@ -5,6 +5,7 @@ import { useStrategyStore, usePaperStore } from '@/store';
 import type { PaperTrade, TradeSnapshot } from '@/store';
 import { formatCurrency, formatPrice } from '@/lib/calculations';
 import { format } from 'date-fns';
+import { EmptyState } from '@/components/UI';
 
 type Filter = 'all' | 'wins' | 'losses' | 'open';
 
@@ -107,18 +108,26 @@ export default function JournalPanel() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="card card-body text-center py-12 text-gray-500">
-          <p className="mb-1 text-sm">
-            {closedTrades.length === 0
-              ? 'No paper trades yet'
-              : 'No trades match these filters'}
-          </p>
-          <p className="text-xs">
-            {closedTrades.length === 0
-              ? 'Enable a strategy in paper mode and let it fire to populate the journal.'
-              : 'Try a different filter or clear the strategy filter.'}
-          </p>
-        </div>
+        <EmptyState
+          icon="journal"
+          title={closedTrades.length === 0 ? 'No paper trades yet' : 'No trades match these filters'}
+          description={
+            closedTrades.length === 0
+              ? 'Enable a strategy in paper mode and let it fire on a watchlist ticker. Each entry/exit auto-captures a 60-bar chart-context snapshot.'
+              : 'Try a different filter or pick "All strategies" above.'
+          }
+          secondaryCta={
+            closedTrades.length > 0
+              ? {
+                  label: 'Reset filters',
+                  onClick: () => {
+                    setFilter('all');
+                    setStrategyFilter('all');
+                  },
+                }
+              : undefined
+          }
+        />
       ) : (
         <div className="space-y-3">
           {filtered.map((t) => (

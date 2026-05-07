@@ -14,6 +14,7 @@ import {
   isWinningTrade,
 } from '@/lib/calculations';
 import { format } from 'date-fns';
+import { EmptyState } from '@/components/UI';
 
 interface TradesPanelProps {
   onSelectTrade?: (id: string) => void;

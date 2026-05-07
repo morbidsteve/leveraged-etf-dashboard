@@ -5,7 +5,7 @@ import { MainLayout, Drawer } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning } from '@/components/Dashboard';
+import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard } from '@/components/Dashboard';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -19,7 +19,7 @@ import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, us
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
 import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
-import { useTradeStore, usePriceStore, useSettingsStore } from '@/store';
+import { useTradeStore, usePriceStore, useSettingsStore, useStrategyStore, usePaperStore } from '@/store';
 import {
   calculatePortfolioSummary,
   formatCurrency,
@@ -166,6 +166,9 @@ export default function CommandCenterPage() {
 
   const trades = useTradeStore((state) => state.trades);
   const prices = usePriceStore((state) => state.prices);
+  const strategies = useStrategyStore((state) => state.strategies);
+  const paperClosed = usePaperStore((state) => state.closed);
+  const isFirstRun = strategies.length === 0 && trades.length === 0 && paperClosed.length === 0;
 
   useKeyboardShortcuts({
     onRefresh: refresh,
@@ -339,6 +342,16 @@ export default function CommandCenterPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* WELCOME (first-run only) */}
+      <div className="px-4 lg:px-6 pt-4">
+        <WelcomeCard
+          show={isFirstRun}
+          onOpenStrategies={() => setDrawer('strategies')}
+          onOpenBacktest={() => setDrawer('backtest')}
+          onOpenSettings={() => setDrawer('settings')}
+        />
       </div>
 
       {/* SIGNAL RADAR */}
@@ -585,16 +598,22 @@ export default function CommandCenterPage() {
           </div>
 
           {/* Quick action launchpad */}
-          <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
-            <ActionTile icon="strategies" label="Strategies" onClick={() => setDrawer('strategies')} highlight />
-            <ActionTile icon="backtest" label="Backtest" onClick={() => setDrawer('backtest')} highlight />
-            <ActionTile icon="journal" label="Journal" onClick={() => setDrawer('journal')} />
-            <ActionTile icon="trades" label="Trades" onClick={() => setDrawer('trades')} />
-            <ActionTile icon="analytics" label="Analytics" onClick={() => setDrawer('analytics')} />
-            <ActionTile icon="scanner" label="Scanner" onClick={() => setDrawer('scanner')} />
-            <ActionTile icon="calc" label="Calculator" onClick={() => setDrawer('calculator')} />
-            <ActionTile icon="alerts" label="Alerts" onClick={() => setDrawer('alerts')} />
-            <ActionTile icon="settings" label="Settings" onClick={() => setDrawer('settings')} />
+          <div className="space-y-3">
+            <LaunchSection label="Strategy">
+              <ActionTile icon="strategies" label="Strategies" onClick={() => setDrawer('strategies')} highlight />
+              <ActionTile icon="backtest" label="Backtest" onClick={() => setDrawer('backtest')} highlight />
+              <ActionTile icon="journal" label="Journal" onClick={() => setDrawer('journal')} />
+            </LaunchSection>
+            <LaunchSection label="Analyze">
+              <ActionTile icon="trades" label="Trades" onClick={() => setDrawer('trades')} />
+              <ActionTile icon="analytics" label="Analytics" onClick={() => setDrawer('analytics')} />
+              <ActionTile icon="scanner" label="Scanner" onClick={() => setDrawer('scanner')} />
+            </LaunchSection>
+            <LaunchSection label="Tools">
+              <ActionTile icon="calc" label="Calculator" onClick={() => setDrawer('calculator')} />
+              <ActionTile icon="alerts" label="Alerts" onClick={() => setDrawer('alerts')} />
+              <ActionTile icon="settings" label="Settings" onClick={() => setDrawer('settings')} />
+            </LaunchSection>
           </div>
         </section>
 
@@ -904,6 +923,17 @@ function ConfigInput({
         onChange={(e) => onChange(Number(e.target.value))}
         className="input w-full font-mono text-sm py-1.5"
       />
+    </div>
+  );
+}
+
+function LaunchSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-1.5">
+        {label}
+      </div>
+      <div className="grid grid-cols-3 gap-2">{children}</div>
     </div>
   );
 }

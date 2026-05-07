@@ -6,6 +6,18 @@ import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 import { Trade } from '@/types';
 import { SchwabConnectCard } from '@/components/Strategy';
 import { downloadBundle, applyBundle } from '@/lib/exportImport';
+import { Tabs, TabPanel, TabDef } from '@/components/UI';
+
+type SettingsTab = 'broker' | 'risk' | 'strategy' | 'scanner' | 'data' | 'help';
+
+const SETTINGS_TABS: TabDef<SettingsTab>[] = [
+  { id: 'broker', label: 'Broker' },
+  { id: 'risk', label: 'Risk & guardrails' },
+  { id: 'strategy', label: 'Strategy defaults' },
+  { id: 'scanner', label: 'Scanner' },
+  { id: 'data', label: 'Data' },
+  { id: 'help', label: 'Help' },
+];
 
 export default function SettingsPanel() {
   const { settings, updateSettings, updateRSIConfig, updateScannerSettings } =
@@ -77,10 +89,22 @@ export default function SettingsPanel() {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <SchwabConnectCard />
+  const [activeTab, setActiveTab] = useState<SettingsTab>('broker');
 
+  return (
+    <div className="space-y-4">
+      <Tabs<SettingsTab>
+        tabs={SETTINGS_TABS}
+        active={activeTab}
+        onChange={setActiveTab}
+        variant="underline"
+      />
+
+      <TabPanel id="broker" active={activeTab}>
+        <SchwabConnectCard />
+      </TabPanel>
+
+      <TabPanel id="risk" active={activeTab}>
       <div className="card">
         <div className="card-header">
           <h2 className="font-medium text-white">Daily guardrails</h2>
@@ -136,7 +160,9 @@ export default function SettingsPanel() {
           </div>
         </div>
       </div>
+      </TabPanel>
 
+      <TabPanel id="strategy" active={activeTab}>
       <div className="card">
         <div className="card-header">
           <h2 className="font-medium text-white">General</h2>
@@ -224,7 +250,9 @@ export default function SettingsPanel() {
           </button>
         </div>
       </div>
+      </TabPanel>
 
+      <TabPanel id="scanner" active={activeTab}>
       <div className="card">
         <div className="card-header">
           <h2 className="font-medium text-white">ETF Scanner Defaults</h2>
@@ -301,7 +329,9 @@ export default function SettingsPanel() {
           </button>
         </div>
       </div>
+      </TabPanel>
 
+      <TabPanel id="data" active={activeTab}>
       <div className="card">
         <div className="card-header">
           <h2 className="font-medium text-white">Data management</h2>
@@ -370,7 +400,9 @@ export default function SettingsPanel() {
           </div>
         </div>
       </div>
+      </TabPanel>
 
+      <TabPanel id="help" active={activeTab}>
       <div className="card">
         <div className="card-header">
           <h2 className="font-medium text-white">Keyboard Shortcuts</h2>
@@ -398,6 +430,7 @@ export default function SettingsPanel() {
           </div>
         </div>
       </div>
+      </TabPanel>
     </div>
   );
 }
