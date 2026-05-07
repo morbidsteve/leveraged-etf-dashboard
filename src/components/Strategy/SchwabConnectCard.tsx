@@ -9,6 +9,14 @@ interface SchwabStatus {
   refreshTokenExpiresInSec: number | null;
   needsReauth: boolean;
   scope?: string;
+  account: {
+    hash: string;
+    accountNumber: string;
+    maskedNumber: string;
+    totalAuthorized: number;
+    pinned: boolean;
+  } | null;
+  accountError: string | null;
 }
 
 export default function SchwabConnectCard() {
@@ -156,6 +164,54 @@ SCHWAB_TOKEN_ENCRYPTION_KEY=<32+ random chars; openssl rand -hex 32>`}
         )}
       </div>
       <div className="card-body space-y-3">
+        {/* Active trading account — the single most important thing to verify */}
+        {status.accountError ? (
+          <div className="rounded-lg p-3 bg-loss/10 border border-loss/40 text-xs text-loss space-y-2">
+            <div className="font-bold uppercase tracking-widest text-[10px]">
+              ⚠ Account selection unsafe — auto orders blocked
+            </div>
+            <div className="font-mono text-[11px] whitespace-pre-wrap">{status.accountError}</div>
+            <div className="text-gray-300">
+              Either re-authorize via "Re-authorize" below and uncheck all but one
+              account on Schwab's consent screen, OR set <code className="text-accent-light">SCHWAB_ACCOUNT_HASH</code>
+              {' '}to the hash of the account you want and restart the container.
+            </div>
+          </div>
+        ) : status.account ? (
+          <div className="rounded-lg p-3 bg-profit/10 border border-profit/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-profit font-semibold">
+                  Trading account
+                </div>
+                <div className="font-mono font-bold text-white text-lg mt-0.5">
+                  {status.account.maskedNumber}
+                </div>
+              </div>
+              <div className="text-right text-[10px]">
+                {status.account.pinned ? (
+                  <span className="badge badge-success">Pinned via env</span>
+                ) : status.account.totalAuthorized === 1 ? (
+                  <span className="badge badge-neutral">Sole authorized</span>
+                ) : (
+                  <span className="badge badge-loss">Ambiguous</span>
+                )}
+                <div className="text-gray-500 mt-1">
+                  {status.account.totalAuthorized} account
+                  {status.account.totalAuthorized === 1 ? '' : 's'} authorized
+                </div>
+              </div>
+            </div>
+            {status.account.totalAuthorized > 1 && !status.account.pinned && (
+              <div className="text-[10px] text-loss mt-2 pt-2 border-t border-profit/30">
+                Multiple accounts authorized but no pin set. Set
+                <code className="text-accent-light"> SCHWAB_ACCOUNT_HASH</code> to lock to
+                one account, or re-authorize and uncheck the others.
+              </div>
+            )}
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-2 gap-3 text-xs">
           <Stat
             label="Access token"

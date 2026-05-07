@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Strategy } from '@/types/strategy';
 import { describeCondition } from '@/lib/strategy/conditions';
 
@@ -12,9 +12,32 @@ interface Props {
   onCancel: () => void;
 }
 
+interface SchwabAccountInfo {
+  maskedNumber: string;
+  totalAuthorized: number;
+  pinned: boolean;
+}
+
 export default function AutoModeConfirmDialog({ strategy, onConfirm, onCancel }: Props) {
   const [typed, setTyped] = useState('');
   const matches = typed.trim().toUpperCase() === REQUIRED_PHRASE;
+  const [account, setAccount] = useState<SchwabAccountInfo | null>(null);
+  const [accountError, setAccountError] = useState<string | null>(null);
+
+  // Pull the live account info so the user sees EXACTLY which Schwab account
+  // is about to be authorized for auto-orders.
+  useEffect(() => {
+    fetch('/api/schwab/status', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => {
+        setAccount(d.account ?? null);
+        setAccountError(d.accountError ?? null);
+      })
+      .catch(() => setAccountError('Could not load Schwab account info'));
+  }, []);
+
+  // Block enabling auto if the account is ambiguous or the connection is broken
+  const blocked = !account || accountError !== null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -34,6 +57,43 @@ export default function AutoModeConfirmDialog({ strategy, onConfirm, onCancel }:
             in your Schwab account automatically</strong> whenever its conditions fire. No
             human approval per trade.
           </p>
+
+          {/* Account being authorized — most important verification */}
+          {accountError ? (
+            <div className="rounded-lg p-3 bg-loss/10 border border-loss/50 text-xs">
+              <div className="font-bold uppercase tracking-widest text-[10px] text-loss mb-1">
+                ⚠ Cannot enable auto — Schwab account unsafe
+              </div>
+              <div className="text-gray-300 font-mono whitespace-pre-wrap">{accountError}</div>
+              <div className="text-gray-300 mt-2">
+                Fix this in Settings → Schwab connection before enabling auto mode.
+              </div>
+            </div>
+          ) : account ? (
+            <div className="rounded-lg p-3 bg-accent/10 border border-accent/40 text-xs">
+              <div className="text-[10px] uppercase tracking-widest text-accent-light font-semibold">
+                Will trade in this Schwab account only
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="font-mono font-bold text-white text-lg">
+                  {account.maskedNumber}
+                </span>
+                <span className="text-[10px] text-gray-400">
+                  {account.pinned
+                    ? 'pinned'
+                    : `${account.totalAuthorized} authorized total`}
+                </span>
+              </div>
+              <div className="text-[10px] text-gray-400 mt-1">
+                Other Schwab accounts you own (if any) are NOT authorized via this OAuth grant
+                and cannot be touched, even if this dashboard is compromised.
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg p-3 bg-white/[0.03] border border-white/5 text-xs text-gray-400">
+              Loading Schwab account info…
+            </div>
+          )}
 
           <div className="rounded-lg p-3 bg-white/[0.03] border border-white/5 text-xs space-y-1">
             <div className="text-[10px] uppercase tracking-widest text-gray-500">
@@ -106,8 +166,9 @@ export default function AutoModeConfirmDialog({ strategy, onConfirm, onCancel }:
           </button>
           <button
             onClick={onConfirm}
-            disabled={!matches}
-            className={`btn ${matches ? 'btn-danger' : 'btn-ghost opacity-50'}`}
+            disabled={!matches || blocked}
+            className={`btn ${matches && !blocked ? 'btn-danger' : 'btn-ghost opacity-50'}`}
+            title={blocked ? 'Resolve the account warning above first' : ''}
           >
             Enable auto-execute
           </button>

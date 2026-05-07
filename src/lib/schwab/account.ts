@@ -7,33 +7,90 @@
  * multiple accounts are linked — otherwise we use the first one.
  */
 
-import { getAccountNumbers } from './client';
+import { getAccountNumbers, type AccountNumberHash } from './client';
 
 let cachedHash: string | null = null;
+let cachedAccountNumber: string | null = null;
+let cachedAccountList: AccountNumberHash[] | null = null;
 
+/**
+ * Resolve the single Schwab account this dashboard is allowed to trade in.
+ *
+ * Resolution order, fail-closed:
+ *   1. SCHWAB_ACCOUNT_HASH env var pinned                       -> use it.
+ *   2. Exactly one account authorized in the OAuth grant        -> use it.
+ *   3. Multiple accounts authorized but no pin                  -> THROW.
+ *      Forces an explicit choice instead of silently defaulting
+ *      to "the first one Schwab returned" which could trade in
+ *      the wrong account.
+ */
 export async function getActiveAccountHash(): Promise<string> {
   if (cachedHash) return cachedHash;
 
   const pinned = process.env.SCHWAB_ACCOUNT_HASH;
+  const accounts = await getAccountNumbers();
+  cachedAccountList = accounts;
+
   if (pinned) {
-    cachedHash = pinned;
+    // Verify the pinned hash is actually in the authorized list — catches
+    // stale env vars after a re-auth without that account checked.
+    const match = accounts.find((a) => a.hashValue === pinned);
+    if (!match) {
+      throw new Error(
+        `SCHWAB_ACCOUNT_HASH is set but that hash is not in the current OAuth ` +
+          `grant. Re-authorize and check the correct account, OR update ` +
+          `SCHWAB_ACCOUNT_HASH. Authorized hashes: ${accounts.map((a) => a.hashValue.slice(0, 8) + '...').join(', ')}`
+      );
+    }
+    cachedHash = match.hashValue;
+    cachedAccountNumber = match.accountNumber;
     return cachedHash;
   }
 
-  const accounts = await getAccountNumbers();
   if (accounts.length === 0) {
-    throw new Error('No Schwab accounts linked to this OAuth grant');
+    throw new Error('No Schwab accounts authorized in this OAuth grant');
   }
-  cachedHash = accounts[0].hashValue;
+
   if (accounts.length > 1) {
-    console.warn(
-      `[schwab/account] ${accounts.length} accounts linked; using first. ` +
-        `Set SCHWAB_ACCOUNT_HASH to pin a specific one.`
+    throw new Error(
+      `${accounts.length} Schwab accounts are authorized but SCHWAB_ACCOUNT_HASH ` +
+        `is not pinned. Refusing to default to "the first one" — pick one ` +
+        `explicitly. Authorized accounts: ${accounts.map((a) => `***${a.accountNumber.slice(-4)} (hash ${a.hashValue.slice(0, 8)}...)`).join(', ')}. ` +
+        `Either re-authorize and uncheck all but one, OR set SCHWAB_ACCOUNT_HASH ` +
+        `to one of the hashes above and restart.`
     );
   }
+
+  cachedHash = accounts[0].hashValue;
+  cachedAccountNumber = accounts[0].accountNumber;
   return cachedHash;
+}
+
+/** Returns the masked account number (last 4) of the resolved active account, or null. */
+export async function getActiveAccountSummary(): Promise<{
+  hash: string;
+  accountNumber: string;
+  maskedNumber: string;
+  totalAuthorized: number;
+  pinned: boolean;
+} | null> {
+  try {
+    const hash = await getActiveAccountHash();
+    if (!cachedAccountNumber) return null;
+    return {
+      hash,
+      accountNumber: cachedAccountNumber,
+      maskedNumber: `***${cachedAccountNumber.slice(-4)}`,
+      totalAuthorized: cachedAccountList?.length ?? 1,
+      pinned: Boolean(process.env.SCHWAB_ACCOUNT_HASH),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function clearAccountHashCache() {
   cachedHash = null;
+  cachedAccountNumber = null;
+  cachedAccountList = null;
 }
