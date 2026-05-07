@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Strategy, ConditionTree, ValueRef, Timeframe, StrategyMode } from '@/types/strategy';
 import { describeCondition } from '@/lib/strategy/conditions';
 import { parseCondition, ParseResult } from '@/lib/strategy/nlparser';
+import BlockBuilder from './BlockBuilder';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
 
@@ -12,14 +13,25 @@ type EntryGoal =
   | 'rsi_above'
   | 'price_above_vwap'
   | 'rsi_with_vwap'
-  | 'natural_language';
+  | 'natural_language'
+  | 'block_builder';
 
 type ExitGoal =
   | 'price_target_pct'
   | 'rsi_cross_back'
   | 'either_target_or_rsi'
   | 'time_based'
-  | 'natural_language';
+  | 'natural_language'
+  | 'block_builder';
+
+const DEFAULT_ENTRY_BLOCK_TREE: ConditionTree = {
+  type: 'and',
+  children: [],
+};
+const DEFAULT_EXIT_BLOCK_TREE: ConditionTree = {
+  type: 'and',
+  children: [],
+};
 
 interface Props {
   onCreate: (strategy: Omit<Strategy, 'id' | 'createdAt' | 'updatedAt'>) => void;
@@ -47,12 +59,14 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
   const [entryTimeframe, setEntryTimeframe] = useState<Timeframe | ''>('');
   const [entryNL, setEntryNL] = useState('');
   const [entryNLResult, setEntryNLResult] = useState<ParseResult | null>(null);
+  const [entryBlockTree, setEntryBlockTree] = useState<ConditionTree>(DEFAULT_ENTRY_BLOCK_TREE);
 
   // Step 2: Exit
   const [exitGoal, setExitGoal] = useState<ExitGoal>('price_target_pct');
   const [targetPct, setTargetPct] = useState(1.5);
   const [exitNL, setExitNL] = useState('');
   const [exitNLResult, setExitNLResult] = useState<ParseResult | null>(null);
+  const [exitBlockTree, setExitBlockTree] = useState<ConditionTree>(DEFAULT_EXIT_BLOCK_TREE);
 
   // Step 3: Risk / sizing / tickers / mode
   const [tickers, setTickers] = useState<string[]>(['SOXL']);
@@ -114,6 +128,8 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
         };
       case 'natural_language':
         return entryNLResult?.tree ?? null;
+      case 'block_builder':
+        return blockTreeOrNull(entryBlockTree);
     }
   };
 
@@ -160,6 +176,8 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
         };
       case 'natural_language':
         return exitNLResult?.tree ?? null;
+      case 'block_builder':
+        return blockTreeOrNull(exitBlockTree);
     }
   };
 
@@ -168,10 +186,12 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
   const canProceed = (): boolean => {
     if (step === 1) {
       if (entryGoal === 'natural_language') return !!entryNLResult?.tree;
+      if (entryGoal === 'block_builder') return blockTreeOrNull(entryBlockTree) !== null;
       return generatedEntry !== null;
     }
     if (step === 2) {
       if (exitGoal === 'natural_language') return !!exitNLResult?.tree;
+      if (exitGoal === 'block_builder') return blockTreeOrNull(exitBlockTree) !== null;
       return generatedExit !== null;
     }
     if (step === 3) {
@@ -276,6 +296,11 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
                   title: 'Type it in plain English',
                   body: 'Free-form text → parsed into a condition tree. Use AND/OR, indicator names, timeframes.',
                 },
+                {
+                  id: 'block_builder',
+                  title: 'Build with blocks (drag-and-drop)',
+                  body: 'Visual editor. Drag indicator/price/time blocks into AND/OR groups. Best for compound rules.',
+                },
               ]}
             />
             {(entryGoal === 'rsi_cross_oversold' ||
@@ -308,7 +333,7 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
                 </Field>
               </div>
             )}
-            {entryGoal !== 'natural_language' && (
+            {entryGoal !== 'natural_language' && entryGoal !== 'block_builder' && (
               <Field label="Timeframe (optional)">
                 <select
                   value={entryTimeframe}
@@ -332,6 +357,13 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
                 onChange={setEntryNL}
                 onParse={tryParseEntry}
                 result={entryNLResult}
+              />
+            )}
+            {entryGoal === 'block_builder' && (
+              <BlockBuilder
+                value={entryBlockTree}
+                onChange={setEntryBlockTree}
+                context="entry"
               />
             )}
             <PreviewBox label="Generated condition" tree={generatedEntry} />
@@ -373,6 +405,11 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
                   title: 'Type it in plain English',
                   body: 'Free-form. Useful for complex compound exits.',
                 },
+                {
+                  id: 'block_builder',
+                  title: 'Build with blocks (drag-and-drop)',
+                  body: 'Visual editor. Drag price/RSI/time blocks. Position-relative blocks (target, stop, held > N) appear too.',
+                },
               ]}
             />
             {(exitGoal === 'price_target_pct' || exitGoal === 'either_target_or_rsi') && (
@@ -394,6 +431,13 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
                 onChange={setExitNL}
                 onParse={tryParseExit}
                 result={exitNLResult}
+              />
+            )}
+            {exitGoal === 'block_builder' && (
+              <BlockBuilder
+                value={exitBlockTree}
+                onChange={setExitBlockTree}
+                context="exit"
               />
             )}
             <PreviewBox label="Generated condition" tree={generatedExit} />
@@ -734,6 +778,7 @@ function autoName(entry: EntryGoal, exit: ExitGoal, tickers: string[]): string {
     price_above_vwap: 'Price > VWAP',
     rsi_with_vwap: 'RSI + VWAP',
     natural_language: 'Custom',
+    block_builder: 'Blocks',
   };
   const x: Record<ExitGoal, string> = {
     price_target_pct: 'target',
@@ -741,7 +786,25 @@ function autoName(entry: EntryGoal, exit: ExitGoal, tickers: string[]): string {
     either_target_or_rsi: 'target/RSI',
     time_based: 'time exit',
     natural_language: 'custom exit',
+    block_builder: 'block exit',
   };
   const tickerLabel = tickers.length === 1 ? tickers[0] : `${tickers.length} tickers`;
   return `${e[entry]} → ${x[exit]} · ${tickerLabel}`;
+}
+
+/**
+ * A block-builder tree is "valid" if it's not empty (contains at least one
+ * leaf condition). Returns null if no leaves are present anywhere.
+ */
+function blockTreeOrNull(tree: ConditionTree): ConditionTree | null {
+  if (countLeaves(tree) === 0) return null;
+  return tree;
+}
+
+function countLeaves(tree: ConditionTree): number {
+  if (tree.type === 'and' || tree.type === 'or') {
+    return tree.children.reduce((sum, c) => sum + countLeaves(c), 0);
+  }
+  if (tree.type === 'not') return countLeaves(tree.child);
+  return 1;
 }

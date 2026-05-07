@@ -18,6 +18,8 @@ import { EmptyState } from '@/components/UI';
 import { runtimeKey } from '@/types/strategy';
 import StrategyWizard from './StrategyWizard';
 import ConditionLiveBadge from './ConditionLiveBadge';
+import EntryFireStrip from './EntryFireStrip';
+import ConditionTreeView from './ConditionTreeView';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
 
@@ -373,6 +375,7 @@ function StrategyDetail({
   onDelete: () => void;
   events: ReturnType<typeof useStrategyStore.getState>['events'];
 }) {
+  const [showTreeView, setShowTreeView] = useState(false);
   return (
     <div className="pt-3 border-t border-white/5 space-y-3 text-xs">
       <Field label={`Tickers (${strategy.tickers.length})`}>
@@ -417,6 +420,20 @@ function StrategyDetail({
         </Field>
       </div>
 
+      <div className="flex items-center justify-end -mb-1">
+        <button
+          onClick={() => setShowTreeView((v) => !v)}
+          className={`text-[9px] uppercase tracking-widest font-mono px-2 py-0.5 rounded border transition ${
+            showTreeView
+              ? 'bg-accent/15 border-accent/40 text-accent-light'
+              : 'bg-white/[0.03] border-white/10 text-gray-500 hover:text-white hover:border-white/20'
+          }`}
+          title="Toggle a hierarchical visualization of the AND/OR/NOT structure"
+        >
+          {showTreeView ? '✓ Tree view' : 'Tree view'}
+        </button>
+      </div>
+
       <div>
         <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
           <div className="text-[9px] uppercase tracking-widest text-gray-500">
@@ -431,11 +448,31 @@ function StrategyDetail({
             ))}
           </div>
         </div>
+        {showTreeView && (
+          <div className="mb-2 p-3 rounded-lg border border-white/5 bg-white/[0.02]">
+            <ConditionTreeView tree={strategy.entry.when} />
+          </div>
+        )}
         <ConditionEditor
           value={strategy.entry.when}
           onChange={(when: ConditionTree) => onUpdate({ entry: { when } })}
           context="entry"
         />
+        <div className="mt-2 space-y-2">
+          <div className="text-[9px] uppercase tracking-widest text-gray-500">
+            Recent fire history (replay)
+          </div>
+          {strategy.tickers.map((t) => (
+            <div key={t} className="space-y-1">
+              <div className="text-[9px] font-mono text-gray-500">{t}</div>
+              <EntryFireStrip
+                condition={strategy.entry.when}
+                ticker={t}
+                rsiConfig={strategy.rsiConfig}
+              />
+            </div>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -447,6 +484,11 @@ function StrategyDetail({
             evaluates with entry_price set when in_position
           </div>
         </div>
+        {showTreeView && (
+          <div className="mb-2 p-3 rounded-lg border border-white/5 bg-white/[0.02]">
+            <ConditionTreeView tree={strategy.exit.when} />
+          </div>
+        )}
         <ConditionEditor
           value={strategy.exit.when}
           onChange={(when: ConditionTree) => onUpdate({ exit: { when } })}
