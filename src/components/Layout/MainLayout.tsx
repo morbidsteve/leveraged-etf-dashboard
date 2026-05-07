@@ -1,16 +1,26 @@
 'use client';
 
 import { ReactNode, useState, useCallback } from 'react';
-import Sidebar from './Sidebar';
+import Sidebar, { DrawerView } from './Sidebar';
 import { useKeyboardShortcuts } from '@/hooks';
 
 interface MainLayoutProps {
   children: ReactNode;
   onRefresh?: () => void;
   contentClassName?: string;
+  /** Pass when the page hosts drawer state — sidebar items will open
+   * drawers in-place instead of navigating. */
+  onSelectDrawer?: (view: DrawerView) => void;
+  activeDrawer?: DrawerView | null;
 }
 
-export default function MainLayout({ children, onRefresh, contentClassName }: MainLayoutProps) {
+export default function MainLayout({
+  children,
+  onRefresh,
+  contentClassName,
+  onSelectDrawer,
+  activeDrawer,
+}: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
 
@@ -28,7 +38,12 @@ export default function MainLayout({ children, onRefresh, contentClassName }: Ma
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onSelectDrawer={onSelectDrawer}
+        activeDrawer={activeDrawer}
+      />
 
       {showSearch && (
         <div

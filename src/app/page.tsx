@@ -180,6 +180,31 @@ export default function CommandCenterPage() {
   // fires sounds + browser notifications + toast on threshold crossings.
   useAlertEngine();
 
+  // Read ?d=<drawer> from URL on mount (sidebar redirects from old pages
+  // and shareable deep-links land here with a drawer pre-opened). Strip
+  // the param after consuming so refreshes are clean.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const d = params.get('d');
+    const ALLOWED = [
+      'strategies', 'monitor', 'backtest', 'journal',
+      'trades', 'analytics', 'scanner',
+      'calculator', 'alerts', 'settings', 'newTrade',
+    ];
+    if (d && ALLOWED.includes(d)) {
+      setDrawer(d as DrawerView);
+      params.delete('d');
+      const qs = params.toString();
+      const url = window.location.pathname + (qs ? `?${qs}` : '');
+      window.history.replaceState(null, '', url);
+    }
+    // Sidebar logo dispatches this to close any open drawer
+    const closeHandler = () => setDrawer(null);
+    window.addEventListener('etf-close-drawer', closeHandler);
+    return () => window.removeEventListener('etf-close-drawer', closeHandler);
+  }, []);
+
   // Pending action awaiting manual confirmation
   const [pendingAction, setPendingAction] = useState<{ action: Action; strategy: Strategy } | null>(null);
 
@@ -259,7 +284,11 @@ export default function CommandCenterPage() {
   const drawerInfo = drawer ? DRAWER_TITLES[drawer] : null;
 
   return (
-    <MainLayout contentClassName="pt-14 lg:pt-0 lg:ml-0">
+    <MainLayout
+      contentClassName="pt-14 lg:pt-0 lg:ml-0"
+      onSelectDrawer={(view) => setDrawer(view as DrawerView)}
+      activeDrawer={drawer}
+    >
       {/* TOP BAR */}
       <div className="sticky top-0 lg:top-0 z-20 px-4 lg:px-6 py-3 glass-strong border-b border-white/5">
         <div className="flex items-center justify-between gap-4 flex-wrap">
