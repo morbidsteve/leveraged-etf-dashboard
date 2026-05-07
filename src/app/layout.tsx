@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Leveraged ETF Trading Dashboard',
-  description: 'Track and analyze leveraged ETF trades with real-time RSI indicators',
+  title: 'Leveraged ETF Command Center',
+  description: 'Real-time RSI scalping dashboard for leveraged ETFs',
 };
 
 export default function RootLayout({
@@ -13,7 +13,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-dark-bg text-white antialiased">
+      <head>
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="bg-ink text-white antialiased">
         {children}
       </body>
     </html>

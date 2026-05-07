@@ -3,7 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+}
+
+const navItems: NavItem[] = [
   {
     href: '/',
     label: 'Dashboard',
@@ -42,7 +48,7 @@ const navItems = [
   },
   {
     href: '/scanner',
-    label: 'ETF Scanner',
+    label: 'Scanner',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -51,7 +57,7 @@ const navItems = [
   },
   {
     href: '/calculator',
-    label: 'DCA Calculator',
+    label: 'Calculator',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -89,36 +95,30 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile overlay */}
       {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden" onClick={onClose} />
       )}
-
-      {/* Sidebar */}
       <aside
         className={`
-          w-64 bg-dark-card border-r border-dark-border flex flex-col h-screen fixed left-0 top-0 z-50
+          w-60 glass-strong flex flex-col h-screen fixed left-0 top-0 z-50
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}
       >
-        {/* Logo */}
-        <div className="p-4 border-b border-dark-border flex items-center justify-between">
+        <div className="p-4 border-b border-white/5 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-white">
-              <span className="text-profit">TQQQ</span> Trader
+            <h1 className="text-lg font-bold tracking-tight">
+              <span className="text-gradient-profit">RSI</span>{' '}
+              <span className="text-white">Trader</span>
             </h1>
-            <p className="text-xs text-gray-500 mt-1">Leveraged ETF Dashboard</p>
+            <p className="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">
+              Leveraged ETF
+            </p>
           </div>
-          {/* Mobile close button */}
           <button
             onClick={onClose}
-            className="lg:hidden p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg transition-colors"
-            aria-label="Close menu"
+            className="lg:hidden p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -126,12 +126,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = pathname === item.href ||
-              (item.href !== '/' && pathname.startsWith(item.href));
-
+            const isActive =
+              pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
             return (
               <Link
                 key={item.href}
@@ -140,42 +138,39 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 className={`nav-link ${isActive ? 'active' : ''}`}
               >
                 {item.icon}
-                <span>{item.label}</span>
+                <span className="text-sm">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        {/* Keyboard shortcuts hint - hidden on mobile */}
-        <div className="p-4 border-t border-dark-border hidden lg:block">
-          <p className="text-xs text-gray-500 mb-2">Keyboard Shortcuts</p>
-          <div className="space-y-1 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">New Trade</span>
-              <kbd className="kbd">N</kbd>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">Calculator</span>
-              <kbd className="kbd">C</kbd>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">Refresh</span>
-              <kbd className="kbd">R</kbd>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">Search</span>
-              <kbd className="kbd">/</kbd>
-            </div>
+        <div className="p-3 border-t border-white/5 hidden lg:block">
+          <p className="text-[10px] text-gray-500 mb-2 uppercase tracking-widest">
+            Shortcuts
+          </p>
+          <div className="space-y-1.5 text-xs">
+            <ShortcutRow label="New Trade" k="N" />
+            <ShortcutRow label="Calculator" k="C" />
+            <ShortcutRow label="Refresh" k="R" />
+            <ShortcutRow label="Search" k="/" />
           </div>
         </div>
 
-        {/* Disclaimer */}
-        <div className="p-4 border-t border-dark-border">
-          <p className="text-[10px] text-gray-600 leading-tight">
-            For personal tracking only. Not financial advice. Leveraged ETFs carry significant risk.
+        <div className="p-3 border-t border-white/5">
+          <p className="text-[9px] text-gray-600 leading-relaxed">
+            Personal tracking only. Not financial advice. Leveraged ETFs carry significant risk.
           </p>
         </div>
       </aside>
     </>
+  );
+}
+
+function ShortcutRow({ label, k }: { label: string; k: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-gray-400">{label}</span>
+      <kbd className="kbd">{k}</kbd>
+    </div>
   );
 }

@@ -311,11 +311,11 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       settings: {
         theme: 'dark',
-        defaultTicker: 'TQQQ',
+        defaultTicker: 'SOXL',
         rsiConfig: DEFAULT_RSI_CONFIG,
         alertSettings: {
           id: 'default',
-          ticker: 'TQQQ',
+          ticker: 'SOXL',
           rsiBuyThreshold: DEFAULT_RSI_CONFIG.oversold,
           rsiSellThreshold: DEFAULT_RSI_CONFIG.overbought,
           priceAlerts: {
@@ -328,12 +328,12 @@ export const useSettingsStore = create<SettingsState>()(
           cooldownMinutes: 5,
           enabled: true,
         },
-        refreshInterval: 1000, // 1 second updates
+        refreshInterval: 1000,
         scannerSettings: DEFAULT_SCANNER_SETTINGS,
-        watchlist: ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'], // Default watchlist
+        watchlist: ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA'],
         chartSettings: {
           interval: '1m',
-          range: '5d',
+          range: '1d',
         },
       },
       _hasHydrated: false,
@@ -364,7 +364,7 @@ export const useSettingsStore = create<SettingsState>()(
       addToWatchlist: (ticker) =>
         set((state) => {
           const upperTicker = ticker.toUpperCase();
-          const currentWatchlist = state.settings.watchlist || ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'];
+          const currentWatchlist = state.settings.watchlist || ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA'];
           if (currentWatchlist.includes(upperTicker)) {
             return state; // Already in watchlist
           }
@@ -378,7 +378,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       removeFromWatchlist: (ticker) =>
         set((state) => {
-          const currentWatchlist = state.settings.watchlist || ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'];
+          const currentWatchlist = state.settings.watchlist || ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA'];
           return {
             settings: {
               ...state.settings,

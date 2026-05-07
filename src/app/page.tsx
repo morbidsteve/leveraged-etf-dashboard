@@ -1,15 +1,31 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-import { MainLayout } from '@/components/Layout';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { MainLayout, Drawer } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
-import { RSIIndicator, RSIGauge } from '@/components/RSI';
+import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { QuickStats, OpenPositions, Watchlist } from '@/components/Dashboard';
+import { OpenPositions } from '@/components/Dashboard';
+import {
+  TradesPanel,
+  AnalyticsPanel,
+  ScannerPanel,
+  CalculatorPanel,
+  AlertsPanel,
+  SettingsPanel,
+  NewTradePanel,
+} from '@/components/Panels';
 import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts } from '@/hooks';
 import { useTradeStore, usePriceStore, useSettingsStore } from '@/store';
-import { calculatePortfolioSummary } from '@/lib/calculations';
-import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
+import {
+  calculatePortfolioSummary,
+  formatCurrency,
+  formatPercent,
+  formatPrice,
+  calculateUnrealizedPnL,
+} from '@/lib/calculations';
+import { DEFAULT_RSI_CONFIG, getRSIColor } from '@/lib/rsi';
+import { RSIData, PriceData } from '@/types';
 
 const INTERVALS = [
   { label: '1m', value: '1m' as const },
@@ -26,7 +42,27 @@ const RANGES = [
   { label: '3M', value: '3mo' as const },
 ];
 
-export default function DashboardPage() {
+type DrawerView =
+  | null
+  | 'trades'
+  | 'analytics'
+  | 'scanner'
+  | 'calculator'
+  | 'alerts'
+  | 'settings'
+  | 'newTrade';
+
+const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle: string }> = {
+  trades: { title: 'Trade History', subtitle: 'All open and closed trades' },
+  analytics: { title: 'Analytics', subtitle: 'Performance metrics & risk' },
+  scanner: { title: 'ETF Scanner', subtitle: 'Find RSI reversal patterns' },
+  calculator: { title: 'DCA Calculator', subtitle: 'Plan averages and targets' },
+  alerts: { title: 'Alerts', subtitle: 'Threshold notifications' },
+  settings: { title: 'Settings', subtitle: 'Strategy & preferences' },
+  newTrade: { title: 'New Trade', subtitle: 'Log a position' },
+};
+
+export default function CommandCenterPage() {
   const hydrated = useHydration();
   const storeHydrated = useStoreHydration();
   const settings = useSettingsStore((state) => state.settings);
@@ -35,63 +71,100 @@ export default function DashboardPage() {
   const removeFromWatchlist = useSettingsStore((state) => state.removeFromWatchlist);
   const updateChartSettings = useSettingsStore((state) => state.updateChartSettings);
 
-  const [selectedTicker, setSelectedTicker] = useState('TQQQ');
-  const [showBuySignals, setShowBuySignals] = useState(true);
+  const [selectedTicker, setSelectedTicker] = useState('SOXL');
   const [showAddTicker, setShowAddTicker] = useState(false);
   const [newTicker, setNewTicker] = useState('');
-  const [showRSISettings, setShowRSISettings] = useState(false);
+  const [showRSIConfig, setShowRSIConfig] = useState(false);
+  const [drawer, setDrawer] = useState<DrawerView>(null);
 
-  // Use stored settings or defaults
-  const defaultWatchlist = ['TQQQ', 'SQQQ', 'UPRO', 'SPXU'];
+  const defaultWatchlist = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA'];
   const rsiConfig = storeHydrated ? settings.rsiConfig : DEFAULT_RSI_CONFIG;
-  const watchlist = (storeHydrated && settings.watchlist) ? settings.watchlist : defaultWatchlist;
+  const watchlist = storeHydrated && settings.watchlist ? settings.watchlist : defaultWatchlist;
   const chartInterval = storeHydrated ? settings.chartSettings?.interval || '1m' : '1m';
-  const chartRange = storeHydrated ? settings.chartSettings?.range || '5d' : '5d';
+  const chartRange = storeHydrated ? settings.chartSettings?.range || '1d' : '1d';
   const refreshInterval = storeHydrated ? settings.refreshInterval : 1000;
 
-  // Dynamic data fetching for watchlist tickers
-  const tickerDataHooks: Record<string, ReturnType<typeof usePriceData>> = {};
+  // Fetch data for every potential ticker (hooks must be unconditional)
+  const tickerHookConfig = (ticker: string) => ({
+    ticker,
+    interval: chartInterval,
+    range: chartRange,
+    refreshInterval,
+    enabled: hydrated && watchlist.includes(ticker),
+    rsiConfig,
+  });
 
-  // We need to call hooks unconditionally, so we'll fetch for all potential tickers
-  const tqqq = usePriceData({ ticker: 'TQQQ', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('TQQQ'), rsiConfig });
-  const sqqq = usePriceData({ ticker: 'SQQQ', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('SQQQ'), rsiConfig });
-  const upro = usePriceData({ ticker: 'UPRO', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('UPRO'), rsiConfig });
-  const spxu = usePriceData({ ticker: 'SPXU', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('SPXU'), rsiConfig });
-  const tna = usePriceData({ ticker: 'TNA', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('TNA'), rsiConfig });
-  const tza = usePriceData({ ticker: 'TZA', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('TZA'), rsiConfig });
-  const labu = usePriceData({ ticker: 'LABU', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('LABU'), rsiConfig });
-  const labd = usePriceData({ ticker: 'LABD', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('LABD'), rsiConfig });
-  const soxl = usePriceData({ ticker: 'SOXL', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('SOXL'), rsiConfig });
-  const soxs = usePriceData({ ticker: 'SOXS', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('SOXS'), rsiConfig });
-  const tecl = usePriceData({ ticker: 'TECL', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('TECL'), rsiConfig });
-  const tecs = usePriceData({ ticker: 'TECS', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('TECS'), rsiConfig });
-  const fngu = usePriceData({ ticker: 'FNGU', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('FNGU'), rsiConfig });
-  const fngd = usePriceData({ ticker: 'FNGD', interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && watchlist.includes('FNGD'), rsiConfig });
-  const custom = usePriceData({ ticker: selectedTicker, interval: chartInterval, range: chartRange, refreshInterval, enabled: hydrated && !['TQQQ','SQQQ','UPRO','SPXU','TNA','TZA','LABU','LABD','SOXL','SOXS','TECL','TECS','FNGU','FNGD'].includes(selectedTicker), rsiConfig });
+  const soxl = usePriceData(tickerHookConfig('SOXL'));
+  const tqqq = usePriceData(tickerHookConfig('TQQQ'));
+  const soxs = usePriceData(tickerHookConfig('SOXS'));
+  const sqqq = usePriceData(tickerHookConfig('SQQQ'));
+  const upro = usePriceData(tickerHookConfig('UPRO'));
+  const spxu = usePriceData(tickerHookConfig('SPXU'));
+  const tna = usePriceData(tickerHookConfig('TNA'));
+  const tza = usePriceData(tickerHookConfig('TZA'));
+  const labu = usePriceData(tickerHookConfig('LABU'));
+  const labd = usePriceData(tickerHookConfig('LABD'));
+  const tecl = usePriceData(tickerHookConfig('TECL'));
+  const tecs = usePriceData(tickerHookConfig('TECS'));
+  const fngu = usePriceData(tickerHookConfig('FNGU'));
+  const fngd = usePriceData(tickerHookConfig('FNGD'));
+  const knownTickers = ['SOXL','TQQQ','SOXS','SQQQ','UPRO','SPXU','TNA','TZA','LABU','LABD','TECL','TECS','FNGU','FNGD'];
+  const custom = usePriceData({
+    ticker: selectedTicker,
+    interval: chartInterval,
+    range: chartRange,
+    refreshInterval,
+    enabled: hydrated && !knownTickers.includes(selectedTicker),
+    rsiConfig,
+  });
 
-  // Map ticker data
   const tickerDataMap: Record<string, ReturnType<typeof usePriceData>> = {
-    TQQQ: tqqq, SQQQ: sqqq, UPRO: upro, SPXU: spxu,
-    TNA: tna, TZA: tza, LABU: labu, LABD: labd,
-    SOXL: soxl, SOXS: soxs, TECL: tecl, TECS: tecs,
-    FNGU: fngu, FNGD: fngd,
+    SOXL: soxl,
+    TQQQ: tqqq,
+    SOXS: soxs,
+    SQQQ: sqqq,
+    UPRO: upro,
+    SPXU: spxu,
+    TNA: tna,
+    TZA: tza,
+    LABU: labu,
+    LABD: labd,
+    TECL: tecl,
+    TECS: tecs,
+    FNGU: fngu,
+    FNGD: fngd,
   };
 
-  // Get selected ticker's data
   const selectedData = tickerDataMap[selectedTicker] || custom;
   const { priceData, candles, rsiData, isLoading, error, refresh } = selectedData;
 
   const trades = useTradeStore((state) => state.trades);
   const prices = usePriceStore((state) => state.prices);
 
-  // Keyboard shortcuts
-  useKeyboardShortcuts({ onRefresh: refresh });
+  useKeyboardShortcuts({
+    onRefresh: refresh,
+    onNewTrade: () => setDrawer('newTrade'),
+    onCalculator: () => setDrawer('calculator'),
+  });
 
-  const portfolioSummary = useMemo(() => {
-    return calculatePortfolioSummary(trades);
-  }, [trades]);
+  const portfolioSummary = useMemo(() => calculatePortfolioSummary(trades), [trades]);
 
-  // Build watchlist items
+  // Day P&L (sum of closed P&L from today + unrealized changes)
+  const dayPnL = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const closedToday = trades
+      .filter((t) => t.status === 'closed' && t.closedAt && new Date(t.closedAt) >= today)
+      .reduce((s, t) => s + t.realizedPnL, 0);
+    const openUnrealized = trades
+      .filter((t) => t.status === 'open')
+      .reduce((s, t) => {
+        const cp = prices[t.ticker]?.price || t.avgCost;
+        return s + calculateUnrealizedPnL(t, cp);
+      }, 0);
+    return closedToday + openUnrealized;
+  }, [trades, prices]);
+
   const watchlistItems = watchlist.map((ticker) => {
     const data = tickerDataMap[ticker] || { priceData: null, rsiData: null, isLoading: true };
     return {
@@ -102,13 +175,13 @@ export default function DashboardPage() {
     };
   });
 
-  const handleAddTicker = () => {
+  const handleAddTicker = useCallback(() => {
     if (newTicker.trim()) {
       addToWatchlist(newTicker.trim());
       setNewTicker('');
       setShowAddTicker(false);
     }
-  };
+  }, [newTicker, addToWatchlist]);
 
   if (!hydrated || !storeHydrated) {
     return (
@@ -120,281 +193,602 @@ export default function DashboardPage() {
     );
   }
 
+  const rsiStatus = rsiData?.status || 'neutral';
+  const rsiColor = getRSIColor(rsiStatus);
+  const isPriceUp = (priceData?.change ?? 0) >= 0;
+
+  const drawerInfo = drawer ? DRAWER_TITLES[drawer] : null;
+
   return (
-    <MainLayout>
-      {/* Watchlist - Multi-ticker overview */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wide">Watchlist</h2>
-          <div className="flex items-center gap-2">
-            {showAddTicker ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={newTicker}
-                  onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddTicker()}
-                  placeholder="TICKER"
-                  className="w-24 px-2 py-1 text-xs bg-dark-card border border-gray-600 rounded text-white"
-                  autoFocus
-                />
-                <button
-                  onClick={handleAddTicker}
-                  className="text-xs px-2 py-1 bg-profit/20 text-profit rounded hover:bg-profit/30"
-                >
-                  Add
-                </button>
-                <button
-                  onClick={() => { setShowAddTicker(false); setNewTicker(''); }}
-                  className="text-xs px-2 py-1 bg-gray-700 text-gray-400 rounded hover:bg-gray-600"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowAddTicker(true)}
-                className="text-xs px-2 py-1 bg-gray-700/50 text-gray-400 rounded hover:bg-gray-600 hover:text-white transition-colors"
-              >
-                + Add Ticker
-              </button>
-            )}
-          </div>
-        </div>
-        <Watchlist
-          items={watchlistItems}
-          selectedTicker={selectedTicker}
-          onSelect={setSelectedTicker}
-          onRemove={removeFromWatchlist}
-        />
-      </div>
-
-      {/* Selected Ticker Details + RSI Settings */}
-      <div className="flex flex-col lg:flex-row gap-6 mb-6">
-        {/* Price Card */}
-        <div className="card flex-1">
-          <div className="card-body">
-            <div className="flex items-start justify-between">
-              <PriceDisplay data={priceData} />
-              <button
-                onClick={refresh}
-                className="btn btn-ghost p-2"
-                title="Refresh"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            </div>
-            {error && (
-              <div className="mt-2 text-sm text-loss">{error}</div>
-            )}
-          </div>
-        </div>
-
-        {/* RSI Card with Settings */}
-        <div className="card w-full lg:w-96">
-          <div className="card-body">
-            <div className="flex items-center justify-between mb-2">
-              <RSIGauge data={rsiData} config={rsiConfig} />
-              <button
-                onClick={() => setShowRSISettings(!showRSISettings)}
-                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
-                title="RSI Settings"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
-            </div>
-
-            {/* RSI Settings Panel */}
-            {showRSISettings && (
-              <div className="mt-3 pt-3 border-t border-gray-700 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-gray-400">Oversold (Buy)</label>
-                  <input
-                    type="number"
-                    value={rsiConfig.oversold}
-                    onChange={(e) => updateRSIConfig({ oversold: Number(e.target.value) })}
-                    className="w-16 px-2 py-1 text-xs bg-dark-card border border-gray-600 rounded text-white text-right"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-gray-400">Overbought (Sell)</label>
-                  <input
-                    type="number"
-                    value={rsiConfig.overbought}
-                    onChange={(e) => updateRSIConfig({ overbought: Number(e.target.value) })}
-                    className="w-16 px-2 py-1 text-xs bg-dark-card border border-gray-600 rounded text-white text-right"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-gray-400">Period</label>
-                  <input
-                    type="number"
-                    value={rsiConfig.period}
-                    onChange={(e) => updateRSIConfig({ period: Number(e.target.value) })}
-                    className="w-16 px-2 py-1 text-xs bg-dark-card border border-gray-600 rounded text-white text-right"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Stats */}
-      <div className="mb-6">
-        <QuickStats summary={portfolioSummary} />
-      </div>
-
-      {/* Chart Section */}
-      <div className="card mb-6">
-        <div className="card-header flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <h3 className="font-medium text-white">{selectedTicker} Chart</h3>
+    <MainLayout contentClassName="pt-14 lg:pt-0 lg:ml-0">
+      {/* TOP BAR */}
+      <div className="sticky top-0 lg:top-0 z-20 px-4 lg:px-6 py-3 glass-strong border-b border-white/5">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Left: ticker + price */}
+          <div className="flex items-center gap-4 min-w-0">
             <div className="flex items-center gap-2">
-              <RSIIndicator data={rsiData} size="sm" showLabel={false} />
+              <span className="live-dot" />
+              <span className="text-[10px] font-medium uppercase tracking-widest text-gray-400">
+                Live
+              </span>
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span className="text-xl font-bold tracking-tight text-white">
+                {selectedTicker}
+              </span>
+              {priceData ? (
+                <>
+                  <span className="font-mono text-2xl font-bold text-white">
+                    ${formatPrice(priceData.price)}
+                  </span>
+                  <span
+                    className={`font-mono text-sm font-semibold ${
+                      isPriceUp ? 'text-profit' : 'text-loss'
+                    }`}
+                  >
+                    {isPriceUp ? '+' : ''}
+                    {formatPrice(priceData.change)} ({formatPercent(priceData.changePercent)})
+                  </span>
+                </>
+              ) : (
+                <span className="text-gray-500 text-sm animate-pulse">Loading...</span>
+              )}
+              {rsiData && (
+                <span
+                  className="hidden sm:inline-flex items-center gap-1.5 text-xs font-mono px-2 py-1 rounded-md border"
+                  style={{
+                    color: rsiColor,
+                    borderColor: `${rsiColor}55`,
+                    backgroundColor: `${rsiColor}15`,
+                  }}
+                >
+                  RSI {rsiData.value.toFixed(1)}
+                </span>
+              )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Chart Interval */}
-            <div className="flex items-center gap-1 bg-gray-800/50 rounded p-0.5">
-              {INTERVALS.map((int) => (
-                <button
-                  key={int.value}
-                  onClick={() => updateChartSettings({ interval: int.value })}
-                  className={`text-xs px-2 py-1 rounded transition-colors ${
-                    chartInterval === int.value
-                      ? 'bg-blue-500/30 text-blue-400'
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  {int.label}
-                </button>
-              ))}
-            </div>
-            {/* Chart Range */}
-            <div className="flex items-center gap-1 bg-gray-800/50 rounded p-0.5">
-              {RANGES.map((rng) => (
-                <button
-                  key={rng.value}
-                  onClick={() => updateChartSettings({ range: rng.value })}
-                  className={`text-xs px-2 py-1 rounded transition-colors ${
-                    chartRange === rng.value
-                      ? 'bg-purple-500/30 text-purple-400'
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  {rng.label}
-                </button>
-              ))}
-            </div>
-            {/* Buy Signal Toggle */}
-            <button
-              onClick={() => setShowBuySignals(!showBuySignals)}
-              className={`text-xs px-2 py-1 rounded transition-colors ${
-                showBuySignals
-                  ? 'bg-profit/20 text-profit border border-profit/30'
-                  : 'bg-gray-700/50 text-gray-400 border border-gray-600'
-              }`}
-              title="Toggle RSI buy signal markers"
-            >
-              RSI Buy Signals {showBuySignals ? 'ON' : 'OFF'}
-            </button>
-            {isLoading && (
-              <span className="text-xs text-gray-500 animate-pulse">Updating...</span>
-            )}
-          </div>
-        </div>
-        <div className="p-2">
-          {candles.length > 0 ? (
-            <div className="h-[300px] sm:h-[400px] lg:h-[500px]">
-              <CandlestickChart
-                candles={candles}
-                trades={trades.filter((t) => t.ticker === selectedTicker)}
-                rsiConfig={rsiConfig}
-                showRSI={true}
-                showVolume={true}
-                showTradeMarkers={true}
-                showRSICrossings={showBuySignals}
-                showOversoldCrossings={showBuySignals}
-                showOverboughtCrossings={false}
-              />
-            </div>
-          ) : (
-            <div className="h-[300px] sm:h-[400px] lg:h-[500px] flex items-center justify-center text-gray-500">
-              {isLoading ? 'Loading chart data...' : 'No chart data available'}
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* Open Positions */}
-      <div className="mb-6">
-        <OpenPositions trades={trades} prices={prices} />
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <a href="/trades/new" className="card card-body hover:bg-dark-hover transition-colors cursor-pointer">
+          {/* Right: day P&L + actions */}
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-profit/20 rounded-lg">
-              <svg className="w-5 h-5 text-profit" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/5">
+              <span className="text-[10px] uppercase tracking-widest text-gray-500">
+                Day P&L
+              </span>
+              <span
+                className={`font-mono font-bold ${
+                  dayPnL >= 0 ? 'text-profit' : 'text-loss'
+                }`}
+              >
+                {dayPnL >= 0 ? '+' : ''}
+                {formatCurrency(dayPnL)}
+              </span>
+            </div>
+            <button
+              onClick={() => setDrawer('newTrade')}
+              className="btn btn-success text-sm px-3 py-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
-            </div>
-            <div>
-              <div className="font-medium text-white">New Trade</div>
-              <div className="text-xs text-gray-500">Log entry</div>
-            </div>
-          </div>
-        </a>
-
-        <a href="/calculator" className="card card-body hover:bg-dark-hover transition-colors cursor-pointer">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-500/20 rounded-lg">
-              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              <span className="hidden sm:inline">New Trade</span>
+            </button>
+            <button
+              onClick={refresh}
+              className="btn btn-ghost p-2"
+              title="Refresh (R)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-            </div>
-            <div>
-              <div className="font-medium text-white">DCA Calculator</div>
-              <div className="text-xs text-gray-500">Plan entries</div>
-            </div>
+            </button>
           </div>
-        </a>
-
-        <a href="/chart" className="card card-body hover:bg-dark-hover transition-colors cursor-pointer">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-500/20 rounded-lg">
-              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-              </svg>
-            </div>
-            <div>
-              <div className="font-medium text-white">Full Chart</div>
-              <div className="text-xs text-gray-500">Advanced view</div>
-            </div>
-          </div>
-        </a>
-
-        <a href="/analytics" className="card card-body hover:bg-dark-hover transition-colors cursor-pointer">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-orange-500/20 rounded-lg">
-              <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <div>
-              <div className="font-medium text-white">Analytics</div>
-              <div className="text-xs text-gray-500">Performance</div>
-            </div>
-          </div>
-        </a>
+        </div>
       </div>
+
+      {/* MAIN GRID */}
+      <div className="grid grid-cols-12 gap-4 p-4 lg:p-6">
+        {/* WATCHLIST RAIL */}
+        <aside className="col-span-12 lg:col-span-3 xl:col-span-2 space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+              Watchlist
+            </h2>
+            <button
+              onClick={() => setShowAddTicker(!showAddTicker)}
+              className="text-[10px] uppercase tracking-wide text-gray-500 hover:text-white transition"
+            >
+              {showAddTicker ? 'Cancel' : '+ Add'}
+            </button>
+          </div>
+
+          {showAddTicker && (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newTicker}
+                onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddTicker()}
+                placeholder="TICKER"
+                className="input flex-1 text-sm py-1.5"
+                autoFocus
+              />
+              <button
+                onClick={handleAddTicker}
+                className="btn btn-success text-xs py-1.5 px-2"
+              >
+                Add
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            {watchlistItems.map((item) => (
+              <WatchlistRow
+                key={item.ticker}
+                {...item}
+                isSelected={item.ticker === selectedTicker}
+                onSelect={() => setSelectedTicker(item.ticker)}
+                onRemove={() => removeFromWatchlist(item.ticker)}
+              />
+            ))}
+          </div>
+        </aside>
+
+        {/* CHART CENTER */}
+        <section className="col-span-12 lg:col-span-6 xl:col-span-7 space-y-4">
+          <div className="card overflow-hidden">
+            <div className="card-header flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <h3 className="font-semibold text-white tracking-tight">
+                  {selectedTicker}
+                  <span className="text-gray-500 text-xs ml-2 font-normal">
+                    {chartInterval} • {chartRange}
+                  </span>
+                </h3>
+                {isLoading && (
+                  <span className="text-[10px] text-gray-500 animate-pulse">Updating...</span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="chip-group">
+                  {INTERVALS.map((int) => (
+                    <button
+                      key={int.value}
+                      onClick={() => updateChartSettings({ interval: int.value })}
+                      className={`chip ${
+                        chartInterval === int.value ? 'active-accent' : ''
+                      }`}
+                    >
+                      {int.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="chip-group">
+                  {RANGES.map((rng) => (
+                    <button
+                      key={rng.value}
+                      onClick={() => updateChartSettings({ range: rng.value })}
+                      className={`chip ${
+                        chartRange === rng.value ? 'active-profit' : ''
+                      }`}
+                    >
+                      {rng.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="p-2">
+              {candles.length > 0 ? (
+                <div className="h-[320px] sm:h-[420px] lg:h-[520px]">
+                  <CandlestickChart
+                    candles={candles}
+                    trades={trades.filter((t) => t.ticker === selectedTicker)}
+                    rsiConfig={rsiConfig}
+                    showRSI={true}
+                    showVolume={true}
+                    showTradeMarkers={true}
+                    showRSICrossings={true}
+                    showOversoldCrossings={true}
+                    showOverboughtCrossings={false}
+                  />
+                </div>
+              ) : (
+                <div className="h-[420px] flex items-center justify-center text-gray-500">
+                  {isLoading ? 'Loading chart data...' : 'No chart data available'}
+                </div>
+              )}
+              {error && <div className="px-3 py-2 text-xs text-loss">{error}</div>}
+            </div>
+          </div>
+
+          {/* RSI Gauge + strategy bar */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="card md:col-span-2">
+              <div className="card-body">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                    RSI Gauge
+                  </span>
+                  <button
+                    onClick={() => setShowRSIConfig(!showRSIConfig)}
+                    className="text-[10px] text-gray-500 hover:text-white uppercase tracking-wide"
+                  >
+                    {showRSIConfig ? 'Done' : 'Tune'}
+                  </button>
+                </div>
+                <RSIGauge data={rsiData} config={rsiConfig} />
+                {showRSIConfig && (
+                  <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-3 gap-3">
+                    <ConfigInput
+                      label="Period"
+                      value={rsiConfig.period}
+                      onChange={(v) => updateRSIConfig({ period: v })}
+                    />
+                    <ConfigInput
+                      label="Oversold"
+                      value={rsiConfig.oversold}
+                      onChange={(v) => updateRSIConfig({ oversold: v })}
+                    />
+                    <ConfigInput
+                      label="Overbought"
+                      value={rsiConfig.overbought}
+                      onChange={(v) => updateRSIConfig({ overbought: v })}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-body">
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
+                  Signal
+                </div>
+                <SignalBadge status={rsiStatus} value={rsiData?.value} />
+                <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-2 gap-2 text-xs">
+                  <Mini label="Win Rate" value={`${portfolioSummary.winRate.toFixed(0)}%`} />
+                  <Mini
+                    label="Trades"
+                    value={portfolioSummary.totalTrades.toString()}
+                  />
+                  <Mini
+                    label="Total P&L"
+                    value={formatCurrency(portfolioSummary.totalProfit)}
+                    color={portfolioSummary.totalProfit >= 0 ? 'profit' : 'loss'}
+                  />
+                  <Mini label="Open" value={portfolioSummary.openTrades.toString()} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick action launchpad */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <ActionTile icon="trades" label="Trades" onClick={() => setDrawer('trades')} />
+            <ActionTile icon="analytics" label="Analytics" onClick={() => setDrawer('analytics')} />
+            <ActionTile icon="scanner" label="Scanner" onClick={() => setDrawer('scanner')} />
+            <ActionTile icon="calc" label="Calculator" onClick={() => setDrawer('calculator')} />
+            <ActionTile icon="alerts" label="Alerts" onClick={() => setDrawer('alerts')} />
+            <ActionTile icon="settings" label="Settings" onClick={() => setDrawer('settings')} />
+          </div>
+        </section>
+
+        {/* RIGHT RAIL - Open Positions */}
+        <aside className="col-span-12 lg:col-span-3 xl:col-span-3">
+          <h2 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
+            Positions ({trades.filter((t) => t.status === 'open').length})
+          </h2>
+          <CompactPositions trades={trades} prices={prices} onSelectTicker={setSelectedTicker} />
+        </aside>
+      </div>
+
+      {/* DRAWERS */}
+      <Drawer
+        open={drawer !== null}
+        onClose={() => setDrawer(null)}
+        title={drawerInfo?.title}
+        subtitle={drawerInfo?.subtitle}
+        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' ? 'xl' : 'lg'}
+      >
+        {drawer === 'trades' && <TradesPanel />}
+        {drawer === 'analytics' && <AnalyticsPanel />}
+        {drawer === 'scanner' && <ScannerPanel />}
+        {drawer === 'calculator' && <CalculatorPanel defaultTicker={selectedTicker} />}
+        {drawer === 'alerts' && <AlertsPanel />}
+        {drawer === 'settings' && <SettingsPanel />}
+        {drawer === 'newTrade' && (
+          <NewTradePanel
+            defaultTicker={selectedTicker}
+            onCreated={() => setDrawer(null)}
+          />
+        )}
+      </Drawer>
     </MainLayout>
+  );
+}
+
+interface WatchlistRowProps {
+  ticker: string;
+  priceData: PriceData | null;
+  rsiData: RSIData | null;
+  isLoading: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+}
+
+function WatchlistRow({
+  ticker,
+  priceData,
+  rsiData,
+  isLoading,
+  isSelected,
+  onSelect,
+  onRemove,
+}: WatchlistRowProps) {
+  const change = priceData?.changePercent ?? 0;
+  const isPositive = change >= 0;
+  const rsiColor = rsiData ? getRSIColor(rsiData.status) : '#6b7280';
+
+  return (
+    <div
+      onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onSelect()}
+      className={`group relative px-3 py-2 rounded-lg border transition-all cursor-pointer ${
+        isSelected
+          ? 'border-accent/50 bg-accent/10'
+          : 'border-white/5 bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]'
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <span className="font-bold text-white text-sm tracking-tight">{ticker}</span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-loss transition-opacity p-0.5"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      {isLoading ? (
+        <div className="h-3 bg-white/5 rounded animate-pulse" />
+      ) : priceData ? (
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-mono text-white">${formatPrice(priceData.price)}</span>
+          <span className={`font-mono font-semibold ${isPositive ? 'text-profit' : 'text-loss'}`}>
+            {isPositive ? '+' : ''}
+            {change.toFixed(2)}%
+          </span>
+        </div>
+      ) : (
+        <div className="text-xs text-gray-500">--</div>
+      )}
+      {rsiData && (
+        <div className="flex items-center justify-between mt-1.5 text-[10px]">
+          <span className="text-gray-500 uppercase tracking-wider">RSI</span>
+          <span className="font-mono font-medium" style={{ color: rsiColor }}>
+            {rsiData.value.toFixed(1)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompactPositions({
+  trades,
+  prices,
+  onSelectTicker,
+}: {
+  trades: ReturnType<typeof useTradeStore.getState>['trades'];
+  prices: Record<string, PriceData>;
+  onSelectTicker: (t: string) => void;
+}) {
+  const open = trades.filter((t) => t.status === 'open');
+
+  if (open.length === 0) {
+    return (
+      <div className="card card-body text-center py-8 text-gray-500 text-xs">
+        <svg className="w-8 h-8 mx-auto mb-2 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        No open positions
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {open.map((trade) => {
+        const cp = prices[trade.ticker]?.price || trade.avgCost;
+        const pnl = (cp - trade.avgCost) * trade.totalShares;
+        const pnlPct = trade.avgCost > 0 ? ((cp - trade.avgCost) / trade.avgCost) * 100 : 0;
+        const target15 = trade.avgCost * 1.015;
+        const target20 = trade.avgCost * 1.02;
+        const isProfit = pnl >= 0;
+        const targetPct =
+          target15 > trade.avgCost
+            ? Math.min(100, Math.max(0, ((cp - trade.avgCost) / (target15 - trade.avgCost)) * 100))
+            : 0;
+
+        return (
+          <button
+            key={trade.id}
+            onClick={() => onSelectTicker(trade.ticker)}
+            className="w-full text-left card glass-hover p-3 space-y-2"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-white text-sm">{trade.ticker}</span>
+              <div className="text-right">
+                <div className={`font-mono text-sm font-bold ${isProfit ? 'text-profit' : 'text-loss'}`}>
+                  {isProfit ? '+' : ''}
+                  {formatCurrency(pnl)}
+                </div>
+                <div className={`font-mono text-[10px] ${isProfit ? 'text-profit' : 'text-loss'}`}>
+                  {formatPercent(pnlPct)}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-gray-500 font-mono">
+              <span>
+                {trade.totalShares} @ {formatPrice(trade.avgCost)}
+              </span>
+              <span className="text-white">{formatPrice(cp)}</span>
+            </div>
+            <div>
+              <div className="flex items-center justify-between text-[10px] mb-1">
+                <span className="text-profit">{formatPrice(target15)} (1.5%)</span>
+                <span className="text-profit">{formatPrice(target20)} (2%)</span>
+              </div>
+              <div className="progress-bar">
+                <div
+                  className="progress-bar-fill"
+                  style={{
+                    width: `${targetPct}%`,
+                    background:
+                      targetPct >= 100
+                        ? 'linear-gradient(90deg, #22c55e, #16a34a)'
+                        : targetPct >= 50
+                        ? 'linear-gradient(90deg, #eab308, #22c55e)'
+                        : 'linear-gradient(90deg, #6b7280, #eab308)',
+                  }}
+                />
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SignalBadge({ status, value }: { status: 'buy' | 'sell' | 'neutral'; value?: number }) {
+  if (status === 'buy') {
+    return (
+      <div className="rounded-lg p-3 bg-profit/15 border border-profit/40">
+        <div className="text-profit text-2xl font-bold tracking-tight">BUY</div>
+        <div className="text-[10px] text-profit/80 uppercase tracking-widest mt-0.5">
+          Oversold {value !== undefined && `· RSI ${value.toFixed(1)}`}
+        </div>
+      </div>
+    );
+  }
+  if (status === 'sell') {
+    return (
+      <div className="rounded-lg p-3 bg-loss/15 border border-loss/40">
+        <div className="text-loss text-2xl font-bold tracking-tight">SELL</div>
+        <div className="text-[10px] text-loss/80 uppercase tracking-widest mt-0.5">
+          Overbought {value !== undefined && `· RSI ${value.toFixed(1)}`}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg p-3 bg-neutral/10 border border-neutral/30">
+      <div className="text-neutral text-2xl font-bold tracking-tight">HOLD</div>
+      <div className="text-[10px] text-neutral/80 uppercase tracking-widest mt-0.5">
+        Neutral {value !== undefined && `· RSI ${value.toFixed(1)}`}
+      </div>
+    </div>
+  );
+}
+
+function Mini({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color?: 'profit' | 'loss';
+}) {
+  const cls = color === 'profit' ? 'text-profit' : color === 'loss' ? 'text-loss' : 'text-white';
+  return (
+    <div>
+      <div className="text-[9px] uppercase tracking-widest text-gray-500">{label}</div>
+      <div className={`font-mono font-bold text-sm ${cls}`}>{value}</div>
+    </div>
+  );
+}
+
+function ConfigInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div>
+      <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">{label}</div>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="input w-full font-mono text-sm py-1.5"
+      />
+    </div>
+  );
+}
+
+function ActionTile({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: 'trades' | 'analytics' | 'scanner' | 'calc' | 'alerts' | 'settings';
+  label: string;
+  onClick: () => void;
+}) {
+  const ICONS: Record<typeof icon, React.ReactNode> = {
+    trades: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+    ),
+    analytics: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    ),
+    scanner: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    ),
+    calc: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+    ),
+    alerts: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+    ),
+    settings: (
+      <>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </>
+    ),
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      className="card glass-hover p-3 flex flex-col items-center justify-center gap-1.5 group"
+    >
+      <svg
+        className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        {ICONS[icon]}
+      </svg>
+      <span className="text-[10px] uppercase tracking-widest text-gray-400 group-hover:text-white transition-colors">
+        {label}
+      </span>
+    </button>
   );
 }

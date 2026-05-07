@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 interface KeyboardShortcutsOptions {
   onRefresh?: () => void;
   onSearch?: () => void;
+  onNewTrade?: () => void;
+  onCalculator?: () => void;
 }
 
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
@@ -13,7 +15,6 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
-      // Don't trigger shortcuts when typing in inputs
       const target = event.target as HTMLElement;
       if (
         target.tagName === 'INPUT' ||
@@ -23,19 +24,18 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
         return;
       }
 
-      // Don't trigger with modifier keys (except for specific combos)
-      if (event.metaKey || event.ctrlKey || event.altKey) {
-        return;
-      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       switch (event.key.toLowerCase()) {
         case 'n':
           event.preventDefault();
-          router.push('/trades/new');
+          if (options.onNewTrade) options.onNewTrade();
+          else router.push('/trades/new');
           break;
         case 'c':
           event.preventDefault();
-          router.push('/calculator');
+          if (options.onCalculator) options.onCalculator();
+          else router.push('/calculator');
           break;
         case 'r':
           event.preventDefault();
