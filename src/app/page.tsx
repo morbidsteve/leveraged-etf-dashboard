@@ -17,7 +17,7 @@ import {
 } from '@/components/Panels';
 import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useStrategyEngine } from '@/hooks';
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
-import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel } from '@/components/Strategy';
+import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel, StrategyMonitor } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
 import { useTradeStore, usePriceStore, useSettingsStore, useStrategyStore, usePaperStore } from '@/store';
 import {
@@ -57,7 +57,8 @@ type DrawerView =
   | 'newTrade'
   | 'strategies'
   | 'backtest'
-  | 'journal';
+  | 'journal'
+  | 'monitor';
 
 const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle: string }> = {
   trades: { title: 'Trade History', subtitle: 'All open and closed trades' },
@@ -70,6 +71,7 @@ const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle
   strategies: { title: 'Strategies', subtitle: 'Composable buy/sell rules engine' },
   backtest: { title: 'Backtest', subtitle: 'Validate a strategy on historical data' },
   journal: { title: 'Trade journal', subtitle: 'Every paper trade with chart-context snapshots' },
+  monitor: { title: 'Live monitor', subtitle: 'Real-time state of every (strategy × ticker)' },
 };
 
 export default function CommandCenterPage() {
@@ -202,7 +204,23 @@ export default function CommandCenterPage() {
     // Sidebar logo dispatches this to close any open drawer
     const closeHandler = () => setDrawer(null);
     window.addEventListener('etf-close-drawer', closeHandler);
-    return () => window.removeEventListener('etf-close-drawer', closeHandler);
+    // Empty-state CTAs dispatch this to swap drawers
+    const openHandler = (e: Event) => {
+      const view = (e as CustomEvent<string>).detail;
+      const ALLOWED = [
+        'strategies', 'monitor', 'backtest', 'journal',
+        'trades', 'analytics', 'scanner',
+        'calculator', 'alerts', 'settings', 'newTrade',
+      ];
+      if (typeof view === 'string' && ALLOWED.includes(view)) {
+        setDrawer(view as DrawerView);
+      }
+    };
+    window.addEventListener('etf-open-drawer', openHandler);
+    return () => {
+      window.removeEventListener('etf-close-drawer', closeHandler);
+      window.removeEventListener('etf-open-drawer', openHandler);
+    };
   }, []);
 
   // Pending action awaiting manual confirmation
@@ -630,7 +648,8 @@ export default function CommandCenterPage() {
           <div className="space-y-3">
             <LaunchSection label="Strategy">
               <ActionTile icon="strategies" label="Strategies" onClick={() => setDrawer('strategies')} highlight />
-              <ActionTile icon="backtest" label="Backtest" onClick={() => setDrawer('backtest')} highlight />
+              <ActionTile icon="monitor" label="Live monitor" onClick={() => setDrawer('monitor')} highlight />
+              <ActionTile icon="backtest" label="Backtest" onClick={() => setDrawer('backtest')} />
               <ActionTile icon="journal" label="Journal" onClick={() => setDrawer('journal')} />
             </LaunchSection>
             <LaunchSection label="Analyze">
@@ -680,9 +699,10 @@ export default function CommandCenterPage() {
         onClose={() => setDrawer(null)}
         title={drawerInfo?.title}
         subtitle={drawerInfo?.subtitle}
-        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' || drawer === 'strategies' || drawer === 'backtest' || drawer === 'journal' ? 'xl' : 'lg'}
+        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' || drawer === 'strategies' || drawer === 'backtest' || drawer === 'journal' || drawer === 'monitor' ? 'xl' : 'lg'}
       >
         {drawer === 'strategies' && <StrategiesPanel />}
+        {drawer === 'monitor' && <StrategyMonitor />}
         {drawer === 'backtest' && <BacktestPanel />}
         {drawer === 'journal' && <JournalPanel />}
         {drawer === 'trades' && <TradesPanel />}
@@ -1004,7 +1024,7 @@ function ActionTile({
   onClick,
   highlight,
 }: {
-  icon: 'strategies' | 'backtest' | 'journal' | 'trades' | 'analytics' | 'scanner' | 'calc' | 'alerts' | 'settings';
+  icon: 'strategies' | 'monitor' | 'backtest' | 'journal' | 'trades' | 'analytics' | 'scanner' | 'calc' | 'alerts' | 'settings';
   label: string;
   onClick: () => void;
   highlight?: boolean;
@@ -1023,6 +1043,12 @@ function ActionTile({
     journal: (
       <>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+      </>
+    ),
+    monitor: (
+      <>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
       </>
     ),
     trades: (
