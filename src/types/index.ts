@@ -27,6 +27,8 @@ export interface Trade {
   tags: string[];
   createdAt: Date;
   closedAt?: Date;
+  /** Per-trade stop price (manual or set via chart drag). */
+  stopPrice?: number;
 }
 
 // Portfolio types

@@ -5,7 +5,7 @@ import { MainLayout, Drawer } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { OpenPositions, SignalRadar, GuardrailIndicator } from '@/components/Dashboard';
+import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning } from '@/components/Dashboard';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -28,6 +28,7 @@ import {
   calculateUnrealizedPnL,
 } from '@/lib/calculations';
 import { DEFAULT_RSI_CONFIG, getRSIColor } from '@/lib/rsi';
+import { getMarketSession, getPollIntervalMs, describeSession } from '@/lib/marketHours';
 import { RSIData, PriceData } from '@/types';
 
 const INTERVALS = [
@@ -262,10 +263,7 @@ export default function CommandCenterPage() {
           {/* Left: ticker + price */}
           <div className="flex items-center gap-4 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="live-dot" />
-              <span className="text-[10px] font-medium uppercase tracking-widest text-gray-400">
-                Live
-              </span>
+              <SessionPill />
               <NotificationPermissionBadge />
             </div>
             <div className="flex items-baseline gap-3">
@@ -508,6 +506,12 @@ export default function CommandCenterPage() {
                     showEMA50={indicators.ema50}
                     showVWAP={indicators.vwap}
                     showBollinger={indicators.bollinger}
+                    stopLines={trades
+                      .filter((t) => t.status === 'open' && t.ticker === selectedTicker && t.stopPrice && t.stopPrice > 0)
+                      .map((t) => ({ ticker: t.ticker, price: t.stopPrice!, tradeId: t.id }))}
+                    entryLines={trades
+                      .filter((t) => t.status === 'open' && t.ticker === selectedTicker)
+                      .map((t) => ({ ticker: t.ticker, price: t.avgCost, tradeId: t.id }))}
                   />
                 </div>
               ) : (
@@ -599,6 +603,7 @@ export default function CommandCenterPage() {
           <h2 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
             Positions ({trades.filter((t) => t.status === 'open').length})
           </h2>
+          <ExposureWarning />
           <CompactPositions trades={trades} prices={prices} onSelectTicker={setSelectedTicker} />
         </aside>
       </div>
@@ -732,6 +737,7 @@ function CompactPositions({
   prices: Record<string, PriceData>;
   onSelectTicker: (t: string) => void;
 }) {
+  const updateTrade = useTradeStore((s) => s.updateTrade);
   const open = trades.filter((t) => t.status === 'open');
 
   if (open.length === 0) {
@@ -760,12 +766,11 @@ function CompactPositions({
             : 0;
 
         return (
-          <button
-            key={trade.id}
-            onClick={() => onSelectTicker(trade.ticker)}
-            className="w-full text-left card glass-hover p-3 space-y-2"
-          >
-            <div className="flex items-center justify-between">
+          <div key={trade.id} className="card glass-hover p-3 space-y-2">
+            <div
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => onSelectTicker(trade.ticker)}
+            >
               <span className="font-bold text-white text-sm">{trade.ticker}</span>
               <div className="text-right">
                 <div className={`font-mono text-sm font-bold ${isProfit ? 'text-profit' : 'text-loss'}`}>
@@ -803,7 +808,29 @@ function CompactPositions({
                 />
               </div>
             </div>
-          </button>
+            <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+              <span className="text-[10px] uppercase tracking-widest text-gray-500 shrink-0">
+                Stop
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                value={trade.stopPrice ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  updateTrade(trade.id, { stopPrice: v ? Number(v) : undefined });
+                }}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="—"
+                className="flex-1 bg-white/[0.05] border border-white/10 rounded px-1.5 py-0.5 text-[11px] font-mono text-loss text-right focus:outline-none focus:border-loss/50"
+              />
+              {trade.stopPrice && trade.stopPrice > 0 && (
+                <span className="text-[9px] font-mono text-loss whitespace-nowrap">
+                  {((trade.stopPrice - trade.avgCost) / trade.avgCost * 100).toFixed(2)}%
+                </span>
+              )}
+            </div>
+          </div>
         );
       })}
     </div>
@@ -877,6 +904,37 @@ function ConfigInput({
         onChange={(e) => onChange(Number(e.target.value))}
         className="input w-full font-mono text-sm py-1.5"
       />
+    </div>
+  );
+}
+
+function SessionPill() {
+  // Re-renders once per minute so the session label / cadence stays current
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const session = getMarketSession();
+  const intervalMs = getPollIntervalMs();
+  const label = describeSession(session);
+  const cadenceLabel =
+    intervalMs < 5000 ? `${(intervalMs / 1000).toFixed(0)}s` : `${(intervalMs / 1000).toFixed(0)}s`;
+  const tone =
+    session === 'open'
+      ? 'text-profit'
+      : session === 'pre' || session === 'post'
+      ? 'text-neutral'
+      : 'text-gray-500';
+  const dotCls = session === 'open' ? 'live-dot' : 'inline-block w-2 h-2 rounded-full bg-gray-500';
+
+  return (
+    <div className="inline-flex items-center gap-2" title={`Polling cadence: ${cadenceLabel}`}>
+      <span className={dotCls} />
+      <span className={`text-[10px] font-medium uppercase tracking-widest ${tone}`}>
+        {label}
+      </span>
+      <span className="text-[10px] font-mono text-gray-600">{cadenceLabel}</span>
     </div>
   );
 }

@@ -54,6 +54,10 @@ interface CandlestickChartProps {
   showEMA50?: boolean;
   showVWAP?: boolean;
   showBollinger?: boolean;
+  /** Stop-loss lines per ticker, drawn as horizontal price lines. */
+  stopLines?: Array<{ ticker: string; price: number; tradeId: string }>;
+  /** Entry-price reference lines per ticker. */
+  entryLines?: Array<{ ticker: string; price: number; tradeId: string }>;
 }
 
 // Helper to extract trade markers from trades
@@ -170,6 +174,8 @@ export default function CandlestickChart({
   showEMA50 = false,
   showVWAP = false,
   showBollinger = false,
+  stopLines = [],
+  entryLines = [],
 }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
@@ -198,6 +204,9 @@ export default function CandlestickChart({
   const bbMiddleRef = useRef<ISeriesApi<any> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bbLowerRef = useRef<ISeriesApi<any> | null>(null);
+  // Active price lines (for stops + entries). Stored to remove on update.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const priceLinesRef = useRef<any[]>([]);
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -681,6 +690,43 @@ export default function CandlestickChart({
     bbUpperRef.current?.applyOptions({ visible: showBollinger });
     bbMiddleRef.current?.applyOptions({ visible: showBollinger });
     bbLowerRef.current?.applyOptions({ visible: showBollinger });
+
+    // ── Stop + entry price lines ─────────────────────────────────────
+    // Tear down previous lines and recreate on every update. Cheap because
+    // there's typically <5 open positions per ticker.
+    if (candlestickSeriesRef.current) {
+      for (const line of priceLinesRef.current) {
+        try {
+          candlestickSeriesRef.current.removePriceLine(line);
+        } catch {
+          // ignore — line may have been removed by chart teardown
+        }
+      }
+      priceLinesRef.current = [];
+
+      for (const stop of stopLines) {
+        const line = candlestickSeriesRef.current.createPriceLine({
+          price: stop.price,
+          color: '#ef4444',
+          lineWidth: 1,
+          lineStyle: 2, // dashed
+          axisLabelVisible: true,
+          title: 'STOP',
+        });
+        priceLinesRef.current.push(line);
+      }
+      for (const entry of entryLines) {
+        const line = candlestickSeriesRef.current.createPriceLine({
+          price: entry.price,
+          color: 'rgba(124, 58, 237, 0.6)',
+          lineWidth: 1,
+          lineStyle: 0,
+          axisLabelVisible: true,
+          title: 'ENTRY',
+        });
+        priceLinesRef.current.push(line);
+      }
+    }
 
     // Calculate RSI data (needed for both RSI chart and crossing markers)
     const rsiData = calculateRSIWithTimestamps(candles, rsiConfig.period);

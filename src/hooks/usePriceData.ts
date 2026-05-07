@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { PriceData, Candle, RSIData, RSIConfig } from '@/types';
 import { getRSIData, DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 import { usePriceStore } from '@/store';
+import { getPollIntervalMs } from '@/lib/marketHours';
 
 interface UsePriceDataOptions {
   ticker: string;
@@ -94,12 +95,31 @@ export function usePriceData({
     fetchData();
   }, [fetchData]);
 
-  // Set up polling
+  // Smart polling: refreshInterval is the ceiling; we slow down outside
+  // regular hours via getPollIntervalMs. Reschedules itself each tick so
+  // session transitions take effect within one tick.
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!enabled || refreshInterval <= 0) return;
 
-    const intervalId = setInterval(fetchData, refreshInterval);
-    return () => clearInterval(intervalId);
+    let cancelled = false;
+    const schedule = () => {
+      if (cancelled) return;
+      const sessionInterval = getPollIntervalMs();
+      // honor the caller's max-frequency floor (refreshInterval is a "no
+      // faster than this" hint); cap to session interval otherwise
+      const next = Math.max(refreshInterval, sessionInterval);
+      pollTimerRef.current = setTimeout(async () => {
+        await fetchData();
+        schedule();
+      }, next);
+    };
+
+    schedule();
+    return () => {
+      cancelled = true;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
   }, [fetchData, refreshInterval, enabled]);
 
   return {

@@ -8,7 +8,18 @@ import {
   CrossLeaf,
   AndNode,
   OrNode,
+  Timeframe,
 } from '@/types/strategy';
+
+const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '1d'];
+const TF_SUPPORTED_KINDS = new Set([
+  'price',
+  'rsi',
+  'ema',
+  'sma',
+  'vwap',
+  'volume',
+]);
 
 /** Where a condition lives — entry conditions can't reference entry_price. */
 export type ConditionContext = 'entry' | 'exit' | 'stop';
@@ -330,10 +341,45 @@ function ValueRefEditor({
         </>
       )}
 
+      {/* Timeframe picker — only for kinds that support it */}
+      {TF_SUPPORTED_KINDS.has(value.kind) && (
+        <TfPicker
+          value={(value as { tf?: Timeframe }).tf}
+          onChange={(tf) => onChange({ ...value, tf } as ValueRef)}
+        />
+      )}
+
       {value.kind === 'pct_of' && (
         <PctOfEditor value={value} onChange={onChange} context={context} />
       )}
     </div>
+  );
+}
+
+function TfPicker({
+  value,
+  onChange,
+}: {
+  value: Timeframe | undefined;
+  onChange: (tf: Timeframe | undefined) => void;
+}) {
+  return (
+    <select
+      value={value ?? ''}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange(v ? (v as Timeframe) : undefined);
+      }}
+      className="bg-white/[0.05] border border-white/10 rounded px-1.5 py-0.5 text-[10px] font-mono text-gray-300 cursor-pointer"
+      title="Timeframe — leave blank to use the strategy's main chart interval"
+    >
+      <option value="" className="bg-ink-surface">native</option>
+      {TIMEFRAMES.map((tf) => (
+        <option key={tf} value={tf} className="bg-ink-surface">
+          @{tf}
+        </option>
+      ))}
+    </select>
   );
 }
 

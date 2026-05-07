@@ -6,14 +6,17 @@ import { RSIConfig } from './index';
 
 // ── Value references — what conditions can read ────────────────────────
 
+/** Supported chart timeframes for multi-timeframe conditions. */
+export type Timeframe = '1m' | '5m' | '15m' | '1h' | '1d';
+
 export type ValueRef =
   | { kind: 'literal'; value: number }
-  | { kind: 'price' }
-  | { kind: 'rsi'; period: number }
-  | { kind: 'ema'; period: number }
-  | { kind: 'sma'; period: number }
-  | { kind: 'vwap' }
-  | { kind: 'volume' }
+  | { kind: 'price'; tf?: Timeframe }                          // close of the most recent bar at tf
+  | { kind: 'rsi'; period: number; tf?: Timeframe }
+  | { kind: 'ema'; period: number; tf?: Timeframe }
+  | { kind: 'sma'; period: number; tf?: Timeframe }
+  | { kind: 'vwap'; tf?: Timeframe }
+  | { kind: 'volume'; tf?: Timeframe }
   | { kind: 'minutes_since_open' }            // 0 at 9:30 ET
   | { kind: 'entry_price' }                   // valid only in EXIT/STOP context
   | { kind: 'minutes_since_entry' }           // valid only in EXIT/STOP context
@@ -80,6 +83,8 @@ export interface Strategy {
   size: SizeRule;
 
   rsiConfig?: RSIConfig;   // optional override of global config
+  /** Extra timeframes this strategy needs (beyond the main chartInterval). */
+  additionalTimeframes?: Timeframe[];
 
   entry: { when: ConditionTree };
   exit:  { when: ConditionTree };
@@ -134,14 +139,27 @@ export type Action =
 
 // ── Evaluation context — everything a condition might read ──────────────
 
+/** Indicator values for a single timeframe. */
+export interface TimeframeIndicators {
+  price: number;
+  rsi: Record<number, number>;     // keyed by period
+  ema: Record<number, number>;
+  sma: Record<number, number>;
+  vwap: number | null;
+  volume: number;
+}
+
 export interface DataContext {
   ticker: string;
+  /** "Native" timeframe values — what the strategy's main chartInterval gave us. */
   price: number;
   rsi: Record<number, number>;     // keyed by period — fill on demand
   ema: Record<number, number>;
   sma: Record<number, number>;
   vwap: number | null;
   volume: number;
+  /** Per-timeframe indicators for multi-timeframe conditions. */
+  byTf?: Partial<Record<Timeframe, TimeframeIndicators>>;
   timestamp: Date;
   // Position-relative values (set when in_position)
   entryPrice?: number;

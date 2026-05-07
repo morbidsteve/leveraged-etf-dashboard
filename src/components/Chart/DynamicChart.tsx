@@ -29,6 +29,8 @@ interface DynamicChartProps {
   showEMA50?: boolean;
   showVWAP?: boolean;
   showBollinger?: boolean;
+  stopLines?: Array<{ ticker: string; price: number; tradeId: string }>;
+  entryLines?: Array<{ ticker: string; price: number; tradeId: string }>;
 }
 
 export default function DynamicChart(props: DynamicChartProps) {

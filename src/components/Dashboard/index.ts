@@ -4,3 +4,4 @@ export { default as QuickStats } from './QuickStats';
 export { Watchlist } from './Watchlist';
 export { default as SignalRadar } from './SignalRadar';
 export { default as GuardrailIndicator } from './GuardrailIndicator';
+export { default as ExposureWarning } from './ExposureWarning';

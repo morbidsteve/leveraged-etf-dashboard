@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStrategyStore, usePaperStore, usePriceStore } from '@/store';
 import { Strategy, StrategyMode, ConditionTree } from '@/types/strategy';
 import AutoModeConfirmDialog from './AutoModeConfirmDialog';
@@ -13,6 +13,7 @@ import { describeState } from '@/lib/strategy/evaluator';
 import { formatCurrency, formatPrice } from '@/lib/calculations';
 import { format } from 'date-fns';
 import ConditionEditor, { blankCustomStrategy } from './ConditionEditor';
+import { buildShareUrl, consumeIncomingStrategy, shareableToAddInput } from '@/lib/strategy/share';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
 
@@ -30,6 +31,47 @@ export default function StrategiesPanel() {
   const [showNew, setShowNew] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingAutoStrategy, setPendingAutoStrategy] = useState<Strategy | null>(null);
+  const [incoming, setIncoming] = useState<ReturnType<typeof consumeIncomingStrategy>>(null);
+
+  // Watch for an incoming shared strategy in the URL hash on mount
+  useEffect(() => {
+    const inc = consumeIncomingStrategy();
+    if (inc) setIncoming(inc);
+  }, []);
+
+  const handleAcceptIncoming = () => {
+    if (!incoming) return;
+    addStrategy(shareableToAddInput(incoming));
+    setIncoming(null);
+  };
+
+  const handleShare = async (s: Strategy) => {
+    const url = buildShareUrl(s);
+    try {
+      await navigator.clipboard.writeText(url);
+      alert(
+        'Share link copied to clipboard.\n\nThe recipient gets a paper-mode, disabled clone — they can review the conditions before enabling.'
+      );
+    } catch {
+      window.prompt('Copy this share URL:', url);
+    }
+  };
+
+  const handleClone = (s: Strategy) => {
+    const cloned = addStrategy({
+      name: `${s.name} (variant)`,
+      ticker: s.ticker,
+      enabled: false,
+      mode: 'paper',  // always start clones in safe paper mode
+      size: s.size,
+      rsiConfig: s.rsiConfig,
+      entry: { when: structuredClone(s.entry.when) },
+      exit: { when: structuredClone(s.exit.when) },
+      stopLoss: s.stopLoss ? { ...s.stopLoss } : undefined,
+      cooldownMinutes: s.cooldownMinutes,
+    });
+    setExpandedId(cloned.id);
+  };
 
   const totalPaperPnL = useMemo(
     () => paperClosed.reduce((s, t) => s + t.realizedPnL, 0),
@@ -63,6 +105,30 @@ export default function StrategiesPanel() {
 
   return (
     <div className="space-y-4">
+      {incoming && (
+        <div className="card border-accent/40">
+          <div className="card-body space-y-2">
+            <div className="text-xs font-semibold uppercase tracking-widest text-accent-light">
+              Shared strategy detected
+            </div>
+            <div className="text-sm text-white">
+              Someone shared a strategy with you: <strong>{incoming.name}</strong> ({incoming.ticker})
+            </div>
+            <div className="text-xs text-gray-400">
+              Will be imported as <strong>paper mode, disabled</strong>. You can review and edit
+              every condition before enabling. Source URL was cleared from your address bar.
+            </div>
+            <div className="flex items-center gap-2 pt-2">
+              <button onClick={handleAcceptIncoming} className="btn btn-primary text-sm">
+                Import
+              </button>
+              <button onClick={() => setIncoming(null)} className="btn btn-ghost text-sm">
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-gray-400">
@@ -170,6 +236,20 @@ export default function StrategiesPanel() {
                     </div>
                     <div className="flex items-center gap-2">
                       <StatePill state={rt?.state ?? 'idle'} enabled={s.enabled} />
+                      <button
+                        onClick={() => handleClone(s)}
+                        className="text-[10px] uppercase tracking-wide text-gray-500 hover:text-accent-light"
+                        title="Clone this strategy in paper mode for A/B testing"
+                      >
+                        Clone
+                      </button>
+                      <button
+                        onClick={() => handleShare(s)}
+                        className="text-[10px] uppercase tracking-wide text-gray-500 hover:text-accent-light"
+                        title="Copy a share URL to clipboard"
+                      >
+                        Share
+                      </button>
                       <button
                         onClick={() => setExpandedId(isExp ? null : s.id)}
                         className="text-[10px] uppercase tracking-wide text-gray-400 hover:text-white"

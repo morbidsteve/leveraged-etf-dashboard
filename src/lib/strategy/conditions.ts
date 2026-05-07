@@ -1,5 +1,5 @@
-import { ConditionTree, DataContext, CompareOp } from '@/types/strategy';
-import { evaluateValue, describeValue } from './values';
+import { ConditionTree, DataContext, CompareOp, Timeframe, ValueRef } from '@/types/strategy';
+import { evaluateValue, describeValue, collectTimeframes as collectTimeframesFromValue } from './values';
 
 /**
  * Evaluate a boolean condition against the current data context.
@@ -55,6 +55,38 @@ export function evaluate(
       const end = eh * 60 + em;
       return minutes >= start && minutes <= end;
     }
+  }
+}
+
+/** Walk a condition tree and collect every timeframe referenced. */
+export function collectTimeframesFromCondition(cond: ConditionTree): Timeframe[] {
+  const set = new Set<Timeframe>();
+  walk(cond);
+  return Array.from(set);
+
+  function walk(c: ConditionTree) {
+    switch (c.type) {
+      case 'and':
+      case 'or':
+        c.children.forEach(walk);
+        return;
+      case 'not':
+        walk(c.child);
+        return;
+      case 'compare':
+        addRef(c.left);
+        addRef(c.right);
+        return;
+      case 'cross':
+        addRef(c.target);
+        addRef(c.threshold);
+        return;
+      case 'time_window':
+        return;
+    }
+  }
+  function addRef(r: ValueRef) {
+    for (const tf of collectTimeframesFromValue(r)) set.add(tf);
   }
 }
 
