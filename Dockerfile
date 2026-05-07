@@ -30,6 +30,9 @@ RUN addgroup --system --gid 1001 nodejs \
 # Standalone output bundles only what's needed to run the server
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# `public/` is NOT auto-included by standalone output — copy it explicitly
+# so the PWA manifest, icons, and any other static assets are served.
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
 
