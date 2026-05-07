@@ -15,6 +15,7 @@ import {
   Action,
   DataContext,
   StrategyEvent,
+  runtimeKey,
 } from '@/types/strategy';
 import { tick } from '@/lib/strategy/evaluator';
 import { dispatchAutoOrder } from '@/lib/strategy/autoExecutor';
@@ -23,6 +24,9 @@ import { calculateRSIWithTimestamps } from '@/lib/rsi';
 import { calculateEMA, calculateSMA } from '@/lib/indicators';
 import { playBuyTone, playSellTone } from '@/lib/sound';
 import { fireNotification } from '@/lib/notify';
+import { useMultiTfData, TfRequirement } from './useMultiTfData';
+import { collectTimeframesFromCondition } from '@/lib/strategy/conditions';
+import { useMemo } from 'react';
 
 /**
  * Strategy engine: every price update, walks through enabled strategies,
@@ -51,8 +55,31 @@ export function useStrategyEngine(opts: {
   const paperClosed = usePaperStore((s) => s.closed);
   const livePrices = usePriceStore((s) => s.prices);
 
-  // Previous data context per ticker — required for crossing detection
+  // Previous data context per (strategy, ticker) — required for crossing detection
   const prevCtxRef = useRef<Record<string, DataContext | null>>({});
+
+  // Multi-timeframe requirements aggregated from every enabled strategy.
+  const tfRequirements = useMemo<TfRequirement[]>(() => {
+    const reqs = new Map<string, TfRequirement>();
+    for (const s of strategies) {
+      if (!s.enabled) continue;
+      for (const ticker of s.tickers) {
+        const tfArr = [
+          ...collectTimeframesFromCondition(s.entry.when),
+          ...collectTimeframesFromCondition(s.exit.when),
+          ...(s.stopLoss?.when ? collectTimeframesFromCondition(s.stopLoss.when) : []),
+          ...(s.additionalTimeframes ?? []),
+        ];
+        for (const tf of Array.from(new Set(tfArr))) {
+          const key = `${ticker}:${tf}`;
+          if (!reqs.has(key)) reqs.set(key, { ticker, tf });
+        }
+      }
+    }
+    return Array.from(reqs.values());
+  }, [strategies]);
+
+  const multiTf = useMultiTfData(tfRequirements, globalRsiConfig);
 
   useEffect(() => {
     const enabled = strategies.filter((s) => s.enabled);
@@ -62,55 +89,56 @@ export function useStrategyEngine(opts: {
     const newEvents: Omit<StrategyEvent, 'id'>[] = [];
 
     for (const strategy of enabled) {
-      const candles = candlesByTicker[strategy.ticker] || [];
-      const live = pricesByTicker[strategy.ticker];
-      if (candles.length === 0 || !live) continue;
+      // Iterate per ticker — each (strategy, ticker) is an independent runtime
+      for (const ticker of strategy.tickers) {
+        const candles = candlesByTicker[ticker] || [];
+        const live = pricesByTicker[ticker];
+        if (candles.length === 0 || !live) continue;
 
-      const rsiConfig = strategy.rsiConfig ?? globalRsiConfig;
+        const rsiConfig = strategy.rsiConfig ?? globalRsiConfig;
 
-      // Compute the data context for this tick
-      const rsiSeries = calculateRSIWithTimestamps(candles, rsiConfig.period);
-      const lastRsi = rsiSeries.length > 0 ? rsiSeries[rsiSeries.length - 1].value : null;
+        const rsiSeries = calculateRSIWithTimestamps(candles, rsiConfig.period);
+        const lastRsi = rsiSeries.length > 0 ? rsiSeries[rsiSeries.length - 1].value : null;
+        const ema20 = calculateEMA(candles, 20);
+        const ema50 = calculateEMA(candles, 50);
+        const sma20 = calculateSMA(candles, 20);
 
-      // Pre-compute a few useful indicators (more on demand later)
-      const ema20 = calculateEMA(candles, 20);
-      const ema50 = calculateEMA(candles, 50);
-      const sma20 = calculateSMA(candles, 20);
+        const ctx: DataContext = {
+          ticker,
+          price: live.price,
+          rsi: { [rsiConfig.period]: lastRsi ?? Number.NaN },
+          ema: {
+            20: ema20.length ? ema20[ema20.length - 1].value : Number.NaN,
+            50: ema50.length ? ema50[ema50.length - 1].value : Number.NaN,
+          },
+          sma: {
+            20: sma20.length ? sma20[sma20.length - 1].value : Number.NaN,
+          },
+          vwap: null,
+          volume: live.volume,
+          byTf: multiTf[ticker],
+          timestamp: live.timestamp instanceof Date ? live.timestamp : new Date(live.timestamp),
+        };
 
-      const ctx: DataContext = {
-        ticker: strategy.ticker,
-        price: live.price,
-        rsi: { [rsiConfig.period]: lastRsi ?? Number.NaN },
-        ema: {
-          20: ema20.length ? ema20[ema20.length - 1].value : Number.NaN,
-          50: ema50.length ? ema50[ema50.length - 1].value : Number.NaN,
-        },
-        sma: {
-          20: sma20.length ? sma20[sma20.length - 1].value : Number.NaN,
-        },
-        vwap: null,
-        volume: live.volume,
-        timestamp: live.timestamp instanceof Date ? live.timestamp : new Date(live.timestamp),
-      };
+        const rtKey = runtimeKey(strategy.id, ticker);
+        const prevCtx = prevCtxRef.current[rtKey] ?? null;
+        const runtime = runtimes[rtKey];
+        if (!runtime) continue;
 
-      const prevCtx = prevCtxRef.current[strategy.id] ?? null;
-      const runtime = runtimes[strategy.id];
-      if (!runtime) continue;
+        const out = tick({ strategy, runtime, prevCtx, currCtx: ctx, now });
 
-      const out = tick({ strategy, runtime, prevCtx, currCtx: ctx, now });
+        if (out.runtime !== runtime) {
+          setRuntime(strategy.id, ticker, out.runtime);
+        }
 
-      if (out.runtime !== runtime) {
-        setRuntime(strategy.id, out.runtime);
-      }
-
-      for (const ev of out.events) {
-        newEvents.push({
-          strategyId: strategy.id,
-          timestamp: now,
-          type: ev.type,
-          detail: ev.detail,
-        });
-      }
+        for (const ev of out.events) {
+          newEvents.push({
+            strategyId: strategy.id,
+            timestamp: now,
+            type: ev.type,
+            detail: `[${ticker}] ${ev.detail}`,
+          });
+        }
 
       // Compute today's P&L (closed manual + closed paper + open unrealized)
       const startOfDay = new Date(now);
@@ -197,7 +225,7 @@ export function useStrategyEngine(opts: {
               rsiConfig,
               markerTime: Math.floor(ctx.timestamp.getTime() / 1000),
             });
-            const trade = closePosition(strategy.id, ctx.price, ctx.timestamp, action.reason, exitSnap);
+            const trade = closePosition(strategy.id, ticker, ctx.price, ctx.timestamp, action.reason, exitSnap);
             if (trade) {
               newEvents.push({
                 strategyId: strategy.id,
@@ -237,16 +265,17 @@ export function useStrategyEngine(opts: {
               ]);
               // Best-effort UI notification — don't trap if blocked.
               fireNotification({
-                title: `❌ Auto-order failed: ${strategy.ticker}`,
+                title: `❌ Auto-order failed: ${action.ticker}`,
                 body: msg.slice(0, 180),
-                tag: `strat-${strategy.id}-error`,
+                tag: `strat-${strategy.id}-${ticker}-error`,
                 requireInteraction: true,
               });
             });
         }
       }
 
-      prevCtxRef.current[strategy.id] = ctx;
+        prevCtxRef.current[rtKey] = ctx;
+      } // end inner ticker loop
     }
 
     if (newEvents.length > 0) appendEvents(newEvents);

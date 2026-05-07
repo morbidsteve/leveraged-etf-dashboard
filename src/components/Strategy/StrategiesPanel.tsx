@@ -15,6 +15,7 @@ import { format } from 'date-fns';
 import ConditionEditor, { blankCustomStrategy } from './ConditionEditor';
 import { buildShareUrl, consumeIncomingStrategy, shareableToAddInput } from '@/lib/strategy/share';
 import { EmptyState } from '@/components/UI';
+import { runtimeKey } from '@/types/strategy';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
 
@@ -61,9 +62,9 @@ export default function StrategiesPanel() {
   const handleClone = (s: Strategy) => {
     const cloned = addStrategy({
       name: `${s.name} (variant)`,
-      ticker: s.ticker,
+      tickers: [...s.tickers],
       enabled: false,
-      mode: 'paper',  // always start clones in safe paper mode
+      mode: 'paper',
       size: s.size,
       rsiConfig: s.rsiConfig,
       entry: { when: structuredClone(s.entry.when) },
@@ -84,7 +85,7 @@ export default function StrategiesPanel() {
       const blanks = blankCustomStrategy();
       addStrategy({
         name: 'Custom strategy',
-        ticker: 'SOXL',
+        tickers: ['SOXL'],
         enabled: false,
         mode: 'paper',
         size: { kind: 'shares', n: 100 },
@@ -113,7 +114,7 @@ export default function StrategiesPanel() {
               Shared strategy detected
             </div>
             <div className="text-sm text-white">
-              Someone shared a strategy with you: <strong>{incoming.name}</strong> ({incoming.ticker})
+              Someone shared a strategy with you: <strong>{incoming.name}</strong> ({incoming.tickers?.join(', ') ?? 'no tickers'})
             </div>
             <div className="text-xs text-gray-400">
               Will be imported as <strong>paper mode, disabled</strong>. You can review and edit
@@ -214,13 +215,20 @@ export default function StrategiesPanel() {
       ) : (
         <div className="space-y-3">
           {strategies.map((s) => {
-            const rt = runtimes[s.id];
-            const live = prices[s.ticker];
-            const open = paperOpen.find((p) => p.strategyId === s.id);
+            // Aggregate across all (strategy, ticker) instances
+            const stratRuntimes = s.tickers.map((t) => runtimes[runtimeKey(s.id, t)]).filter(Boolean);
+            const opensForStrat = paperOpen.filter((p) => p.strategyId === s.id);
             const closedForStrat = paperClosed.filter((t) => t.strategyId === s.id);
             const stratPnL = closedForStrat.reduce((sum, t) => sum + t.realizedPnL, 0);
-            const liveOpenPnL =
-              open && live ? (live.price - open.entryPrice) * open.shares : 0;
+            // Live unrealized P&L summed across all open positions
+            const liveOpenPnL = opensForStrat.reduce((sum, p) => {
+              const live = prices[p.ticker];
+              return live ? sum + (live.price - p.entryPrice) * p.shares : sum;
+            }, 0);
+            // Aggregate state across instances — show "in_position" if any are
+            const inPositionCount = stratRuntimes.filter((r) => r.state === 'in_position').length;
+            const armedCount = stratRuntimes.filter((r) => r.state === 'armed').length;
+            const cooldownCount = stratRuntimes.filter((r) => r.state === 'cooldown').length;
             const isExp = expandedId === s.id;
 
             return (
@@ -235,15 +243,21 @@ export default function StrategiesPanel() {
                       />
                       <div className="min-w-0">
                         <div className="font-medium text-white tracking-tight">{s.name}</div>
-                        <div className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5">
-                          {s.ticker} ·{' '}
+                        <div className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5 truncate">
+                          {s.tickers.join(', ')} ·{' '}
                           {s.size.kind === 'shares' ? `${s.size.n} shares` : `risk ${s.size.pct}%`}{' '}
                           · {s.mode}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <StatePill state={rt?.state ?? 'idle'} enabled={s.enabled} />
+                      <StatePill
+                        inPosition={inPositionCount}
+                        armed={armedCount}
+                        cooldown={cooldownCount}
+                        total={s.tickers.length}
+                        enabled={s.enabled}
+                      />
                       <button
                         onClick={() => handleClone(s)}
                         className="text-[10px] uppercase tracking-wide text-gray-500 hover:text-accent-light"
@@ -271,11 +285,11 @@ export default function StrategiesPanel() {
                   <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5 text-xs">
                     <div>
                       <div className="text-[9px] uppercase tracking-widest text-gray-500">
-                        Open paper
+                        Open positions
                       </div>
-                      {open ? (
+                      {opensForStrat.length > 0 ? (
                         <div className="font-mono">
-                          {open.shares} @ {formatPrice(open.entryPrice)}
+                          {opensForStrat.length} on {opensForStrat.map((p) => p.ticker).join(', ')}
                           <span className={liveOpenPnL >= 0 ? 'text-profit ml-2' : 'text-loss ml-2'}>
                             {liveOpenPnL >= 0 ? '+' : ''}
                             {formatCurrency(liveOpenPnL)}
@@ -299,12 +313,10 @@ export default function StrategiesPanel() {
                     </div>
                     <div>
                       <div className="text-[9px] uppercase tracking-widest text-gray-500">
-                        Cooldown
+                        Tickers
                       </div>
-                      <div className="font-mono text-gray-300">
-                        {rt?.cooldownUntil
-                          ? `until ${format(new Date(rt.cooldownUntil), 'HH:mm:ss')}`
-                          : '—'}
+                      <div className="font-mono text-gray-300 truncate" title={s.tickers.join(', ')}>
+                        {s.tickers.length}
                       </div>
                     </div>
                   </div>
@@ -360,20 +372,13 @@ function StrategyDetail({
 }) {
   return (
     <div className="pt-3 border-t border-white/5 space-y-3 text-xs">
+      <Field label={`Tickers (${strategy.tickers.length})`}>
+        <TickersPicker
+          value={strategy.tickers}
+          onChange={(tickers) => onUpdate({ tickers })}
+        />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Ticker">
-          <select
-            value={strategy.ticker}
-            onChange={(e) => onUpdate({ ticker: e.target.value })}
-            className="input w-full text-xs py-1.5"
-          >
-            {COMMON_TICKERS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </Field>
         <Field label="Mode">
           <select
             value={strategy.mode}
@@ -535,18 +540,132 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   );
 }
 
-function StatePill({ state, enabled }: { state: string; enabled: boolean }) {
-  const cls =
-    state === 'in_position'
-      ? 'badge-profit'
-      : state === 'armed'
-      ? 'badge-accent'
-      : state === 'cooldown'
-      ? 'badge-neutral'
-      : 'badge-neutral';
+function TickersPicker({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [input, setInput] = useState('');
+  const valueSet = new Set(value.map((t) => t.toUpperCase()));
+
+  const addTicker = (t: string) => {
+    const upper = t.trim().toUpperCase();
+    if (!upper || valueSet.has(upper)) return;
+    onChange([...value, upper]);
+  };
+
+  const removeTicker = (t: string) => {
+    onChange(value.filter((x) => x !== t));
+  };
+
+  const togglePreset = (t: string) => {
+    if (valueSet.has(t)) removeTicker(t);
+    else addTicker(t);
+  };
+
   return (
-    <span className={`badge ${cls}`}>
-      {enabled ? describeState(state as Parameters<typeof describeState>[0]) : 'disabled'}
-    </span>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-white/[0.03] border border-white/5 min-h-[40px]">
+        {value.map((t) => (
+          <span
+            key={t}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/20 border border-accent/30 text-accent-light text-xs font-mono"
+          >
+            {t}
+            <button
+              onClick={() => removeTicker(t)}
+              className="hover:text-white"
+              aria-label={`Remove ${t}`}
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </span>
+        ))}
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value.toUpperCase())}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
+              e.preventDefault();
+              addTicker(input);
+              setInput('');
+            } else if (e.key === 'Backspace' && input === '' && value.length > 0) {
+              removeTicker(value[value.length - 1]);
+            }
+          }}
+          placeholder={value.length === 0 ? 'Type ticker + Enter' : ''}
+          className="flex-1 min-w-[80px] bg-transparent border-0 text-xs font-mono text-white focus:outline-none px-1"
+        />
+      </div>
+      <div className="flex flex-wrap gap-1">
+        <span className="text-[9px] uppercase tracking-widest text-gray-500 mr-1 mt-1">Quick add:</span>
+        {COMMON_TICKERS.map((t) => {
+          const active = valueSet.has(t);
+          return (
+            <button
+              key={t}
+              onClick={() => togglePreset(t)}
+              className={`text-[10px] font-mono px-2 py-0.5 rounded border transition ${
+                active
+                  ? 'bg-accent/20 border-accent/40 text-accent-light'
+                  : 'bg-white/[0.03] border-white/5 text-gray-400 hover:text-white hover:border-white/20'
+              }`}
+            >
+              {active ? '−' : '+'} {t}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-gray-500 leading-relaxed">
+        The strategy runs <strong>independently per ticker</strong> — each ticker gets its own
+        runtime state, paper position, and event log. Adding a ticker creates a fresh armed
+        instance; removing one cancels its runtime (open paper positions for that ticker stay
+        in the journal).
+      </p>
+    </div>
   );
+}
+
+function StatePill({
+  inPosition,
+  armed,
+  cooldown,
+  total,
+  enabled,
+}: {
+  inPosition: number;
+  armed: number;
+  cooldown: number;
+  total: number;
+  enabled: boolean;
+}) {
+  if (!enabled) return <span className="badge badge-neutral">disabled</span>;
+  // Aggregate badge: prioritize in_position > armed > cooldown
+  if (inPosition > 0) {
+    return (
+      <span className="badge badge-profit">
+        {inPosition === total ? 'In position' : `${inPosition}/${total} in position`}
+      </span>
+    );
+  }
+  if (armed > 0) {
+    return (
+      <span className="badge badge-accent">
+        {armed === total ? 'Armed' : `${armed}/${total} armed`}
+      </span>
+    );
+  }
+  if (cooldown > 0) {
+    return (
+      <span className="badge badge-neutral">
+        {cooldown === total ? 'Cooldown' : `${cooldown}/${total} cooldown`}
+      </span>
+    );
+  }
+  return <span className="badge badge-neutral">idle</span>;
 }

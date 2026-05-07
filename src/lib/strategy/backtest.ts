@@ -116,12 +116,16 @@ export function runBacktest({
   const sma20ByTime = byTime(sma20Series);
   const vwapByTime = byTime(vwapSeries);
 
+  // Backtest runs against a single ticker — pick the strategy's first ticker
+  // (or the strategy as a whole if upstream code already constrained it).
+  const backtestTicker = strategy.tickers[0] ?? 'SOXL';
+
   // ── Strategy state (separate from any live runtime) ──
   let runtime: StrategyRuntime = {
-    ...initialRuntime(strategy.id),
+    ...initialRuntime(strategy.id, backtestTicker),
     state: 'armed', // backtest: assume armed from bar 0 (skip the idle->armed transition)
   };
-  const stratForBacktest: Strategy = { ...strategy, enabled: true };
+  const stratForBacktest: Strategy = { ...strategy, enabled: true, tickers: [backtestTicker] };
 
   let prevCtx: DataContext | null = null;
   const trades: BacktestTrade[] = [];
@@ -142,7 +146,7 @@ export function runBacktest({
     const time = candleTimeToDate(bar.time);
 
     const ctx: DataContext = {
-      ticker: strategy.ticker,
+      ticker: backtestTicker,
       price: bar.close,
       rsi: { [rsiConfig.period]: rsiByTime.get(bar.time) ?? Number.NaN },
       ema: {
@@ -283,7 +287,7 @@ export function runBacktest({
   return {
     strategyId: strategy.id,
     strategyName: strategy.name,
-    ticker: strategy.ticker,
+    ticker: backtestTicker,
     interval,
     range,
     startDate: candles.length > 0 ? candleTimeToDate(candles[0].time) : null,
@@ -368,7 +372,7 @@ function emptyResult(
   return {
     strategyId: strategy.id,
     strategyName: strategy.name,
-    ticker: strategy.ticker,
+    ticker: strategy.tickers[0] ?? 'SOXL',
     interval,
     range,
     startDate: null,

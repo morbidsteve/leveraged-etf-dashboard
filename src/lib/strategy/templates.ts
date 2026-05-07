@@ -1,21 +1,35 @@
 import { Strategy } from '@/types/strategy';
 
 /**
- * The user's exact RSI scalp strategy as a pre-built template.
- *
- * Buy when RSI(250) crosses below 50; sell when price reaches entry × 1.015
- * (the +1.5% target). Optional 1% safety stop loss.
+ * Pre-built strategy templates. Default to applying to a single ticker
+ * but accept `tickers: []` to seed a multi-ticker scan strategy from the
+ * jump.
  */
-export function userRsiScalpTemplate(opts: {
+
+interface TemplateOpts {
   ticker?: string;
+  tickers?: string[];        // overrides ticker if provided
   shares?: number;
   rsiPeriod?: number;
   oversold?: number;
   overbought?: number;
   targetPct?: number;
   safetyStopPct?: number;
-} = {}): Omit<Strategy, 'id' | 'createdAt' | 'updatedAt'> {
-  const ticker = opts.ticker ?? 'SOXL';
+}
+
+function resolveTickers(opts: TemplateOpts): string[] {
+  if (opts.tickers && opts.tickers.length > 0) return opts.tickers;
+  return [opts.ticker ?? 'SOXL'];
+}
+
+/**
+ * RSI scalp with price-target exit — the user's exact setup:
+ * Buy when RSI(250) crosses below 50; sell when price >= entry × 1.015.
+ */
+export function userRsiScalpTemplate(
+  opts: TemplateOpts = {}
+): Omit<Strategy, 'id' | 'createdAt' | 'updatedAt'> {
+  const tickers = resolveTickers(opts);
   const shares = opts.shares ?? 100;
   const period = opts.rsiPeriod ?? 250;
   const oversold = opts.oversold ?? 50;
@@ -24,10 +38,10 @@ export function userRsiScalpTemplate(opts: {
   const safetyStopPct = opts.safetyStopPct ?? 1;
 
   return {
-    name: `RSI scalp · ${ticker}`,
-    ticker,
-    enabled: false,                  // user opts in explicitly
-    mode: 'paper',                   // safe default
+    name: tickers.length === 1 ? `RSI scalp · ${tickers[0]}` : `RSI scalp · ${tickers.length} tickers`,
+    tickers,
+    enabled: false,
+    mode: 'paper',
     size: { kind: 'shares', n: shares },
     rsiConfig: { period, oversold, overbought },
     entry: {
@@ -52,18 +66,13 @@ export function userRsiScalpTemplate(opts: {
 }
 
 /**
- * Variant: exit on RSI crossing back above the overbought threshold instead of
- * a fixed price target. Demonstrates non-price exit conditions.
+ * Same buy. Sell when RSI crosses back above the overbought threshold.
+ * Demonstrates non-price exit conditions.
  */
-export function userRsiScalpRsiExitTemplate(opts: {
-  ticker?: string;
-  shares?: number;
-  rsiPeriod?: number;
-  oversold?: number;
-  overbought?: number;
-  safetyStopPct?: number;
-} = {}): Omit<Strategy, 'id' | 'createdAt' | 'updatedAt'> {
-  const ticker = opts.ticker ?? 'SOXL';
+export function userRsiScalpRsiExitTemplate(
+  opts: TemplateOpts = {}
+): Omit<Strategy, 'id' | 'createdAt' | 'updatedAt'> {
+  const tickers = resolveTickers(opts);
   const shares = opts.shares ?? 100;
   const period = opts.rsiPeriod ?? 250;
   const oversold = opts.oversold ?? 50;
@@ -71,8 +80,10 @@ export function userRsiScalpRsiExitTemplate(opts: {
   const safetyStopPct = opts.safetyStopPct ?? 1;
 
   return {
-    name: `RSI scalp (RSI exit) · ${ticker}`,
-    ticker,
+    name: tickers.length === 1
+      ? `RSI scalp (RSI exit) · ${tickers[0]}`
+      : `RSI scalp (RSI exit) · ${tickers.length} tickers`,
+    tickers,
     enabled: false,
     mode: 'paper',
     size: { kind: 'shares', n: shares },

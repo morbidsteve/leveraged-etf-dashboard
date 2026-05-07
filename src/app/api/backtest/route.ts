@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ticker = (body.ticker || strategy.ticker).toUpperCase();
+  const fallbackTicker = strategy.tickers?.[0] ?? 'SOXL';
+  const ticker = (body.ticker || fallbackTicker).toUpperCase();
   const interval = body.interval || '5m';
   const range = body.range || '1mo';
 
@@ -92,9 +93,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Strategy from client is JSON; convert date strings back to Date.
+    // Override `tickers` to the single ticker we're backtesting in this run.
     const normalizedStrategy: Strategy = {
       ...strategy,
-      ticker,
+      tickers: [ticker],
       createdAt: new Date(strategy.createdAt),
       updatedAt: new Date(strategy.updatedAt),
     };

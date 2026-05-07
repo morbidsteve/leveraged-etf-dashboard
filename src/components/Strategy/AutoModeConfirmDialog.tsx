@@ -100,7 +100,7 @@ export default function AutoModeConfirmDialog({ strategy, onConfirm, onCancel }:
               About to go live
             </div>
             <div className="font-mono text-gray-200">
-              {strategy.ticker} ·{' '}
+              {strategy.tickers.join(' · ')} ·{' '}
               {strategy.size.kind === 'shares' ? `${strategy.size.n} shares` : `risk ${strategy.size.pct}%`}{' '}
               · cooldown {strategy.cooldownMinutes}m
             </div>

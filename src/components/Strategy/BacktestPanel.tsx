@@ -84,7 +84,7 @@ export default function BacktestPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           strategy: selected,
-          ticker: tickerOverride.trim().toUpperCase() || selected.ticker,
+          ticker: tickerOverride.trim().toUpperCase() || selected.tickers[0],
           interval: preset.interval,
           range: preset.range,
         }),
@@ -164,11 +164,12 @@ export default function BacktestPanel() {
               type="text"
               value={tickerOverride}
               onChange={(e) => setTickerOverride(e.target.value.toUpperCase())}
-              placeholder={selected?.ticker || 'SOXL'}
+              placeholder={selected?.tickers[0] || 'SOXL'}
               className="input w-full font-mono uppercase text-sm"
             />
             <div className="mt-2 text-[10px] text-gray-500">
-              Leave empty to use strategy's default ({selected?.ticker}).
+              Leave empty to use strategy's first ticker ({selected?.tickers.join(', ') || 'SOXL'}).
+              Backtest runs against ONE ticker per run.
             </div>
           </div>
           <div>

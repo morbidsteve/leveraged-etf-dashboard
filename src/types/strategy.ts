@@ -77,7 +77,10 @@ export type SizeRule =
 export interface Strategy {
   id: string;
   name: string;
-  ticker: string;
+  /** All tickers this strategy applies to. Each runs as an independent
+   * runtime/paper instance. Migration: legacy `ticker: string` strategies
+   * are auto-converted to `tickers: [ticker]`. */
+  tickers: string[];
   enabled: boolean;
   mode: StrategyMode;
   size: SizeRule;
@@ -109,11 +112,19 @@ export type StrategyState =
 
 export interface StrategyRuntime {
   strategyId: string;
+  /** Specific ticker this runtime tracks (one strategy can have N runtimes,
+   * one per ticker). Composite key for storage: `${strategyId}:${ticker}`. */
+  ticker: string;
   state: StrategyState;
   entryPrice: number | null;
   entryAt: Date | null;
   shares: number | null;
   cooldownUntil: Date | null;
+}
+
+/** Build a composite runtime key for a (strategy, ticker) pair. */
+export function runtimeKey(strategyId: string, ticker: string): string {
+  return `${strategyId}:${ticker}`;
 }
 
 // ── Actions emitted by the evaluator ────────────────────────────────────

@@ -19,7 +19,7 @@ const HASH_KEY = 's';
 function strategyToShareable(s: Strategy): ShareableStrategy {
   return {
     name: s.name,
-    ticker: s.ticker,
+    tickers: s.tickers,
     mode: 'paper',  // always import as paper, regardless of source
     size: s.size,
     rsiConfig: s.rsiConfig,
@@ -56,12 +56,17 @@ export function decodeStrategy(encoded: string): ShareableStrategy | null {
     if (
       typeof obj !== 'object' ||
       typeof obj.name !== 'string' ||
-      typeof obj.ticker !== 'string' ||
       !obj.entry ||
       !obj.exit
     ) {
       return null;
     }
+    // Migrate legacy single-ticker shares
+    if (typeof obj.ticker === 'string' && !Array.isArray(obj.tickers)) {
+      obj.tickers = [obj.ticker];
+      delete obj.ticker;
+    }
+    if (!Array.isArray(obj.tickers) || obj.tickers.length === 0) return null;
     return obj as ShareableStrategy;
   } catch {
     return null;

@@ -52,9 +52,13 @@ interface PaperState {
   _hasHydrated: boolean;
 
   setHasHydrated: (s: boolean) => void;
+  /** Opens a paper position for a (strategy, ticker) pair. Idempotent —
+   * if one already exists for the same pair, the call is a no-op. */
   openPosition: (input: Omit<PaperEntry, 'id'>) => void;
+  /** Closes the paper position for a specific (strategy, ticker) pair. */
   closePosition: (
     strategyId: string,
+    ticker: string,
     exitPrice: number,
     exitAt: Date,
     reason: string,
@@ -74,14 +78,22 @@ export const usePaperStore = create<PaperState>()(
       setHasHydrated: (s) => set({ _hasHydrated: s }),
 
       openPosition: (input) => {
-        // Don't open multiple paper positions for the same strategy at once
-        if (get().open.some((p) => p.strategyId === input.strategyId)) return;
+        // Don't open multiple paper positions for the same (strategy, ticker)
+        if (
+          get().open.some(
+            (p) => p.strategyId === input.strategyId && p.ticker === input.ticker
+          )
+        ) {
+          return;
+        }
         const entry: PaperEntry = { ...input, id: generateId() };
         set((state) => ({ open: [...state.open, entry] }));
       },
 
-      closePosition: (strategyId, exitPrice, exitAt, reason, exitSnapshot) => {
-        const open = get().open.find((p) => p.strategyId === strategyId);
+      closePosition: (strategyId, ticker, exitPrice, exitAt, reason, exitSnapshot) => {
+        const open = get().open.find(
+          (p) => p.strategyId === strategyId && p.ticker === ticker
+        );
         if (!open) return null;
         const realizedPnL = (exitPrice - open.entryPrice) * open.shares;
         const trade: PaperTrade = {
@@ -99,7 +111,9 @@ export const usePaperStore = create<PaperState>()(
           exitSnapshot,
         };
         set((state) => ({
-          open: state.open.filter((p) => p.strategyId !== strategyId),
+          open: state.open.filter(
+            (p) => !(p.strategyId === strategyId && p.ticker === ticker)
+          ),
           closed: [...state.closed, trade],
         }));
         return trade;

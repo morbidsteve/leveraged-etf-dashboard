@@ -73,7 +73,7 @@ export function tick(input: TickInput): TickOutput {
         actions.push({
           kind: 'enter',
           strategyId: strategy.id,
-          ticker: strategy.ticker,
+          ticker: currCtx.ticker,
           shares,
           orderType: 'marketable_limit',
           reason: describeCondition(strategy.entry.when),
@@ -94,7 +94,7 @@ export function tick(input: TickInput): TickOutput {
         });
         events.push({
           type: 'action_emitted',
-          detail: `BUY ${shares} ${strategy.ticker} marketable @ ${currCtx.price.toFixed(2)} — ${describeCondition(strategy.entry.when)}`,
+          detail: `BUY ${shares} ${currCtx.ticker} marketable @ ${currCtx.price.toFixed(2)} — ${describeCondition(strategy.entry.when)}`,
         });
       }
       break;
@@ -120,7 +120,7 @@ export function tick(input: TickInput): TickOutput {
         actions.push({
           kind: 'exit',
           strategyId: strategy.id,
-          ticker: strategy.ticker,
+          ticker: currCtx.ticker,
           shares,
           orderType: stopFired ? 'marketable_limit' : isTargetExit ? 'resting_limit' : 'marketable_limit',
           limitPrice: isTargetExit && !stopFired ? targetPrice(strategy, runtime) : undefined,
@@ -141,7 +141,7 @@ export function tick(input: TickInput): TickOutput {
         });
         events.push({
           type: 'action_emitted',
-          detail: `SELL ${shares} ${strategy.ticker} — ${stopFired ? 'STOP' : 'EXIT'}`,
+          detail: `SELL ${shares} ${currCtx.ticker} — ${stopFired ? 'STOP' : 'EXIT'}`,
         });
       }
       break;
@@ -168,9 +168,10 @@ export function tick(input: TickInput): TickOutput {
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
-export function initialRuntime(strategyId: string): StrategyRuntime {
+export function initialRuntime(strategyId: string, ticker: string): StrategyRuntime {
   return {
     strategyId,
+    ticker,
     state: 'idle',
     entryPrice: null,
     entryAt: null,

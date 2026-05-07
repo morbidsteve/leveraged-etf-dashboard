@@ -6,3 +6,4 @@ export { default as SchwabConnectCard } from './SchwabConnectCard';
 export { default as AutoModeConfirmDialog } from './AutoModeConfirmDialog';
 export { default as KillSwitch } from './KillSwitch';
 export { default as JournalPanel } from './JournalPanel';
+export { default as StrategyMonitor } from './StrategyMonitor';
