@@ -1,0 +1,384 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { useStrategyStore, usePaperStore, usePriceStore } from '@/store';
+import { Strategy, StrategyMode } from '@/types/strategy';
+import {
+  userRsiScalpTemplate,
+  userRsiScalpRsiExitTemplate,
+} from '@/lib/strategy/templates';
+import { describeCondition } from '@/lib/strategy/conditions';
+import { describeState } from '@/lib/strategy/evaluator';
+import { formatCurrency, formatPrice } from '@/lib/calculations';
+import { format } from 'date-fns';
+
+const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
+
+export default function StrategiesPanel() {
+  const strategies = useStrategyStore((s) => s.strategies);
+  const runtimes = useStrategyStore((s) => s.runtimes);
+  const events = useStrategyStore((s) => s.events);
+  const addStrategy = useStrategyStore((s) => s.addStrategy);
+  const updateStrategy = useStrategyStore((s) => s.updateStrategy);
+  const deleteStrategy = useStrategyStore((s) => s.deleteStrategy);
+  const paperOpen = usePaperStore((s) => s.open);
+  const paperClosed = usePaperStore((s) => s.closed);
+  const prices = usePriceStore((s) => s.prices);
+
+  const [showNew, setShowNew] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const totalPaperPnL = useMemo(
+    () => paperClosed.reduce((s, t) => s + t.realizedPnL, 0),
+    [paperClosed]
+  );
+
+  const handleSeed = (variant: 'target' | 'rsi-exit') => {
+    const tpl =
+      variant === 'target'
+        ? userRsiScalpTemplate({ ticker: 'SOXL' })
+        : userRsiScalpRsiExitTemplate({ ticker: 'SOXL' });
+    addStrategy(tpl);
+    setShowNew(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-400">
+            Strategies watch live data and fire actions when conditions hit. Paper mode
+            simulates fills without touching your broker.
+          </p>
+          {paperClosed.length > 0 && (
+            <p className="text-xs mt-1">
+              <span className="text-gray-500">Paper P&L (all-time):</span>{' '}
+              <span
+                className={`font-mono font-semibold ${
+                  totalPaperPnL >= 0 ? 'text-profit' : 'text-loss'
+                }`}
+              >
+                {formatCurrency(totalPaperPnL)} · {paperClosed.length} closed
+              </span>
+            </p>
+          )}
+        </div>
+        <button onClick={() => setShowNew(!showNew)} className="btn btn-primary text-sm">
+          {showNew ? 'Cancel' : '+ New Strategy'}
+        </button>
+      </div>
+
+      {showNew && (
+        <div className="card">
+          <div className="card-header">
+            <h3 className="font-medium text-white">Start from a template</h3>
+          </div>
+          <div className="card-body space-y-3">
+            <button
+              onClick={() => handleSeed('target')}
+              className="w-full text-left p-3 rounded-lg border border-white/5 hover:border-accent/40 hover:bg-accent/5 transition"
+            >
+              <div className="font-medium text-white text-sm">RSI scalp · price target exit</div>
+              <div className="text-xs text-gray-400 mt-1">
+                Buy when RSI(250) crosses below 50 on SOXL. Sell at entry × 1.015 (1.5% target).
+                1% safety stop. Cooldown 5 min.
+              </div>
+            </button>
+            <button
+              onClick={() => handleSeed('rsi-exit')}
+              className="w-full text-left p-3 rounded-lg border border-white/5 hover:border-accent/40 hover:bg-accent/5 transition"
+            >
+              <div className="font-medium text-white text-sm">RSI scalp · RSI exit</div>
+              <div className="text-xs text-gray-400 mt-1">
+                Same buy. Sell when RSI crosses above 55 instead of a fixed target. Demonstrates
+                non-price exit conditions.
+              </div>
+            </button>
+            <p className="text-[10px] text-gray-500">
+              Seeded strategies start <strong>disabled</strong> in paper mode. Edit ticker/shares
+              after creating, then flip enabled to start watching.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {strategies.length === 0 ? (
+        <div className="card card-body text-center py-12 text-gray-500">
+          <p className="mb-2">No strategies yet</p>
+          <p className="text-xs">Click <strong className="text-white">+ New Strategy</strong> to seed one from a template.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {strategies.map((s) => {
+            const rt = runtimes[s.id];
+            const live = prices[s.ticker];
+            const open = paperOpen.find((p) => p.strategyId === s.id);
+            const closedForStrat = paperClosed.filter((t) => t.strategyId === s.id);
+            const stratPnL = closedForStrat.reduce((sum, t) => sum + t.realizedPnL, 0);
+            const liveOpenPnL =
+              open && live ? (live.price - open.entryPrice) * open.shares : 0;
+            const isExp = expandedId === s.id;
+
+            return (
+              <div key={s.id} className="card">
+                <div className="card-body space-y-2">
+                  {/* Header row */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <Toggle
+                        on={s.enabled}
+                        onChange={(v) => updateStrategy(s.id, { enabled: v })}
+                      />
+                      <div className="min-w-0">
+                        <div className="font-medium text-white tracking-tight">{s.name}</div>
+                        <div className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5">
+                          {s.ticker} ·{' '}
+                          {s.size.kind === 'shares' ? `${s.size.n} shares` : `risk ${s.size.pct}%`}{' '}
+                          · {s.mode}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <StatePill state={rt?.state ?? 'idle'} enabled={s.enabled} />
+                      <button
+                        onClick={() => setExpandedId(isExp ? null : s.id)}
+                        className="text-[10px] uppercase tracking-wide text-gray-400 hover:text-white"
+                      >
+                        {isExp ? 'Hide' : 'Details'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Live status row */}
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5 text-xs">
+                    <div>
+                      <div className="text-[9px] uppercase tracking-widest text-gray-500">
+                        Open paper
+                      </div>
+                      {open ? (
+                        <div className="font-mono">
+                          {open.shares} @ {formatPrice(open.entryPrice)}
+                          <span className={liveOpenPnL >= 0 ? 'text-profit ml-2' : 'text-loss ml-2'}>
+                            {liveOpenPnL >= 0 ? '+' : ''}
+                            {formatCurrency(liveOpenPnL)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-gray-600">—</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-[9px] uppercase tracking-widest text-gray-500">
+                        Paper P&L (closed)
+                      </div>
+                      <div
+                        className={`font-mono ${
+                          stratPnL >= 0 ? 'text-profit' : 'text-loss'
+                        }`}
+                      >
+                        {formatCurrency(stratPnL)} · {closedForStrat.length}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] uppercase tracking-widest text-gray-500">
+                        Cooldown
+                      </div>
+                      <div className="font-mono text-gray-300">
+                        {rt?.cooldownUntil
+                          ? `until ${format(new Date(rt.cooldownUntil), 'HH:mm:ss')}`
+                          : '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {isExp && (
+                    <StrategyDetail
+                      strategy={s}
+                      onUpdate={(patch) => updateStrategy(s.id, patch)}
+                      onDelete={() => {
+                        if (confirm(`Delete strategy "${s.name}"?`)) deleteStrategy(s.id);
+                      }}
+                      events={events.filter((e) => e.strategyId === s.id)}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StrategyDetail({
+  strategy,
+  onUpdate,
+  onDelete,
+  events,
+}: {
+  strategy: Strategy;
+  onUpdate: (patch: Partial<Strategy>) => void;
+  onDelete: () => void;
+  events: ReturnType<typeof useStrategyStore.getState>['events'];
+}) {
+  return (
+    <div className="pt-3 border-t border-white/5 space-y-3 text-xs">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Ticker">
+          <select
+            value={strategy.ticker}
+            onChange={(e) => onUpdate({ ticker: e.target.value })}
+            className="input w-full text-xs py-1.5"
+          >
+            {COMMON_TICKERS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Mode">
+          <select
+            value={strategy.mode}
+            onChange={(e) => onUpdate({ mode: e.target.value as StrategyMode })}
+            className="input w-full text-xs py-1.5"
+          >
+            <option value="paper">Paper</option>
+            <option value="manual_confirm">Manual confirm</option>
+            <option value="auto" disabled>
+              Auto (Tier 3 — Schwab)
+            </option>
+          </select>
+        </Field>
+        <Field label="Shares">
+          <input
+            type="number"
+            value={strategy.size.kind === 'shares' ? strategy.size.n : 0}
+            onChange={(e) =>
+              onUpdate({ size: { kind: 'shares', n: Number(e.target.value) } })
+            }
+            className="input w-full text-xs py-1.5 font-mono"
+            min={1}
+          />
+        </Field>
+        <Field label="Cooldown (min)">
+          <input
+            type="number"
+            value={strategy.cooldownMinutes}
+            onChange={(e) =>
+              onUpdate({ cooldownMinutes: Number(e.target.value) })
+            }
+            className="input w-full text-xs py-1.5 font-mono"
+            min={0}
+          />
+        </Field>
+      </div>
+
+      <div>
+        <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">
+          Entry condition
+        </div>
+        <div className="font-mono text-gray-200 px-2 py-1.5 rounded bg-white/[0.03] border border-white/5">
+          {describeCondition(strategy.entry.when)}
+        </div>
+      </div>
+      <div>
+        <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">
+          Exit condition
+        </div>
+        <div className="font-mono text-gray-200 px-2 py-1.5 rounded bg-white/[0.03] border border-white/5">
+          {describeCondition(strategy.exit.when)}
+        </div>
+      </div>
+      {strategy.stopLoss?.pct !== undefined && (
+        <div>
+          <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">
+            Safety stop
+          </div>
+          <div className="font-mono text-gray-200 px-2 py-1.5 rounded bg-white/[0.03] border border-white/5">
+            price {'<'}= entry_price × {(1 - strategy.stopLoss.pct / 100).toFixed(4)}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">
+          Recent events ({events.length})
+        </div>
+        <div className="max-h-40 overflow-y-auto space-y-1 font-mono text-[11px]">
+          {events.length === 0 ? (
+            <div className="text-gray-600 italic">No events yet</div>
+          ) : (
+            events
+              .slice(-50)
+              .reverse()
+              .map((e) => (
+                <div key={e.id} className="flex gap-2 text-gray-400">
+                  <span className="text-gray-600 shrink-0">
+                    {format(new Date(e.timestamp), 'HH:mm:ss')}
+                  </span>
+                  <span className="text-gray-500 shrink-0">{e.type}</span>
+                  <span className="text-gray-300 truncate">{e.detail}</span>
+                </div>
+              ))
+          )}
+        </div>
+      </div>
+
+      <div className="pt-2 border-t border-white/5 flex justify-end">
+        <button
+          onClick={onDelete}
+          className="text-[10px] uppercase tracking-widest text-loss hover:text-loss-light"
+        >
+          Delete strategy
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="text-[9px] uppercase tracking-widest text-gray-500 block mb-1">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!on)}
+      className={`mt-1 relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+        on ? 'bg-profit' : 'bg-white/10'
+      }`}
+      type="button"
+    >
+      <div
+        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+          on ? 'left-4' : 'left-0.5'
+        }`}
+      />
+    </button>
+  );
+}
+
+function StatePill({ state, enabled }: { state: string; enabled: boolean }) {
+  const cls =
+    state === 'in_position'
+      ? 'badge-profit'
+      : state === 'armed'
+      ? 'badge-accent'
+      : state === 'cooldown'
+      ? 'badge-neutral'
+      : 'badge-neutral';
+  return (
+    <span className={`badge ${cls}`}>
+      {enabled ? describeState(state as Parameters<typeof describeState>[0]) : 'disabled'}
+    </span>
+  );
+}

@@ -15,7 +15,10 @@ import {
   SettingsPanel,
   NewTradePanel,
 } from '@/components/Panels';
-import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts } from '@/hooks';
+import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useStrategyEngine } from '@/hooks';
+import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
+import { StrategyConfirmModal, StrategiesPanel } from '@/components/Strategy';
+import { Action, Strategy } from '@/types/strategy';
 import { useTradeStore, usePriceStore, useSettingsStore } from '@/store';
 import {
   calculatePortfolioSummary,
@@ -50,7 +53,8 @@ type DrawerView =
   | 'calculator'
   | 'alerts'
   | 'settings'
-  | 'newTrade';
+  | 'newTrade'
+  | 'strategies';
 
 const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle: string }> = {
   trades: { title: 'Trade History', subtitle: 'All open and closed trades' },
@@ -60,6 +64,7 @@ const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle
   alerts: { title: 'Alerts', subtitle: 'Threshold notifications' },
   settings: { title: 'Settings', subtitle: 'Strategy & preferences' },
   newTrade: { title: 'New Trade', subtitle: 'Log a position' },
+  strategies: { title: 'Strategies', subtitle: 'Composable buy/sell rules engine' },
 };
 
 export default function CommandCenterPage() {
@@ -147,6 +152,19 @@ export default function CommandCenterPage() {
     onCalculator: () => setDrawer('calculator'),
   });
 
+  // Mount the alert engine — watches RSI across all watchlist tickers and
+  // fires sounds + browser notifications + toast on threshold crossings.
+  useAlertEngine();
+
+  // Pending action awaiting manual confirmation
+  const [pendingAction, setPendingAction] = useState<{ action: Action; strategy: Strategy } | null>(null);
+
+  // Mount the strategy engine — runs every tick, evaluates enabled strategies,
+  // emits paper trades or fires the manual-confirm modal.
+  useStrategyEngine({
+    onPendingAction: (action, strategy) => setPendingAction({ action, strategy }),
+  });
+
   const portfolioSummary = useMemo(() => calculatePortfolioSummary(trades), [trades]);
 
   // Day P&L (sum of closed P&L from today + unrealized changes)
@@ -211,6 +229,7 @@ export default function CommandCenterPage() {
               <span className="text-[10px] font-medium uppercase tracking-widest text-gray-400">
                 Live
               </span>
+              <NotificationPermissionBadge />
             </div>
             <div className="flex items-baseline gap-3">
               <span className="text-xl font-bold tracking-tight text-white">
@@ -464,7 +483,8 @@ export default function CommandCenterPage() {
           </div>
 
           {/* Quick action launchpad */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            <ActionTile icon="strategies" label="Strategies" onClick={() => setDrawer('strategies')} highlight />
             <ActionTile icon="trades" label="Trades" onClick={() => setDrawer('trades')} />
             <ActionTile icon="analytics" label="Analytics" onClick={() => setDrawer('analytics')} />
             <ActionTile icon="scanner" label="Scanner" onClick={() => setDrawer('scanner')} />
@@ -483,14 +503,33 @@ export default function CommandCenterPage() {
         </aside>
       </div>
 
+      {/* ALERT TOAST — surfaces live signals in the corner */}
+      <AlertToast onOpenPanel={() => setDrawer('alerts')} />
+
+      {/* STRATEGY CONFIRM MODAL — manual_confirm strategies surface here */}
+      <StrategyConfirmModal
+        pending={
+          pendingAction
+            ? {
+                action: pendingAction.action,
+                strategy: pendingAction.strategy,
+                livePrice: priceData?.price ?? 0,
+              }
+            : null
+        }
+        onConfirm={() => setPendingAction(null)}
+        onCancel={() => setPendingAction(null)}
+      />
+
       {/* DRAWERS */}
       <Drawer
         open={drawer !== null}
         onClose={() => setDrawer(null)}
         title={drawerInfo?.title}
         subtitle={drawerInfo?.subtitle}
-        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' ? 'xl' : 'lg'}
+        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' || drawer === 'strategies' ? 'xl' : 'lg'}
       >
+        {drawer === 'strategies' && <StrategiesPanel />}
         {drawer === 'trades' && <TradesPanel />}
         {drawer === 'analytics' && <AnalyticsPanel />}
         {drawer === 'scanner' && <ScannerPanel />}
@@ -744,12 +783,19 @@ function ActionTile({
   icon,
   label,
   onClick,
+  highlight,
 }: {
-  icon: 'trades' | 'analytics' | 'scanner' | 'calc' | 'alerts' | 'settings';
+  icon: 'strategies' | 'trades' | 'analytics' | 'scanner' | 'calc' | 'alerts' | 'settings';
   label: string;
   onClick: () => void;
+  highlight?: boolean;
 }) {
   const ICONS: Record<typeof icon, React.ReactNode> = {
+    strategies: (
+      <>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </>
+    ),
     trades: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
     ),
@@ -776,17 +822,27 @@ function ActionTile({
   return (
     <button
       onClick={onClick}
-      className="card glass-hover p-3 flex flex-col items-center justify-center gap-1.5 group"
+      className={`card glass-hover p-3 flex flex-col items-center justify-center gap-1.5 group ${
+        highlight ? 'border-accent/40 bg-accent/5' : ''
+      }`}
     >
       <svg
-        className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors"
+        className={`w-5 h-5 transition-colors ${
+          highlight ? 'text-accent-light' : 'text-gray-400 group-hover:text-white'
+        }`}
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
       >
         {ICONS[icon]}
       </svg>
-      <span className="text-[10px] uppercase tracking-widest text-gray-400 group-hover:text-white transition-colors">
+      <span
+        className={`text-[10px] uppercase tracking-widest transition-colors ${
+          highlight
+            ? 'text-accent-light'
+            : 'text-gray-400 group-hover:text-white'
+        }`}
+      >
         {label}
       </span>
     </button>

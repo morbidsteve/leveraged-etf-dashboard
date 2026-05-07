@@ -1,5 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+
+export { useStrategyStore } from './strategyStore';
+export { usePaperStore } from './paperStore';
+export type { PaperEntry, PaperTrade } from './paperStore';
 import {
   Trade,
   TradeEntry,
