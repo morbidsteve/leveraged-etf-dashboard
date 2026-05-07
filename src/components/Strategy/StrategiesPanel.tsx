@@ -16,6 +16,8 @@ import ConditionEditor, { blankCustomStrategy } from './ConditionEditor';
 import { buildShareUrl, consumeIncomingStrategy, shareableToAddInput } from '@/lib/strategy/share';
 import { EmptyState } from '@/components/UI';
 import { runtimeKey } from '@/types/strategy';
+import StrategyWizard from './StrategyWizard';
+import ConditionLiveBadge from './ConditionLiveBadge';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
 
@@ -156,48 +158,49 @@ export default function StrategiesPanel() {
       </div>
 
       {showNew && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="font-medium text-white">Start from a template</h3>
+        <>
+          <StrategyWizard
+            onCreate={(input) => {
+              addStrategy(input);
+              setShowNew(false);
+            }}
+            onCancel={() => setShowNew(false)}
+          />
+          <div className="card">
+            <div className="card-header">
+              <h3 className="font-medium text-white text-sm">Or start from a quick template</h3>
+            </div>
+            <div className="card-body space-y-2">
+              <button
+                onClick={() => handleSeed('target')}
+                className="w-full text-left p-2.5 rounded-lg border border-white/5 hover:border-accent/40 hover:bg-accent/5 transition"
+              >
+                <div className="font-medium text-white text-xs">RSI scalp · price target exit</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">
+                  RSI(250) below 50 → buy. Price ≥ entry × 1.015 → sell. 1% stop. 5min cooldown.
+                </div>
+              </button>
+              <button
+                onClick={() => handleSeed('rsi-exit')}
+                className="w-full text-left p-2.5 rounded-lg border border-white/5 hover:border-accent/40 hover:bg-accent/5 transition"
+              >
+                <div className="font-medium text-white text-xs">RSI scalp · RSI exit</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">
+                  Same buy. Sell on RSI crossing above 55 instead of price target.
+                </div>
+              </button>
+              <button
+                onClick={() => handleSeed('custom')}
+                className="w-full text-left p-2.5 rounded-lg border border-white/5 hover:border-accent/40 hover:bg-accent/5 transition"
+              >
+                <div className="font-medium text-white text-xs">Build from scratch (skip wizard)</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">
+                  Seeds the default RSI setup; edit every condition inline in the form-based editor.
+                </div>
+              </button>
+            </div>
           </div>
-          <div className="card-body space-y-3">
-            <button
-              onClick={() => handleSeed('target')}
-              className="w-full text-left p-3 rounded-lg border border-white/5 hover:border-accent/40 hover:bg-accent/5 transition"
-            >
-              <div className="font-medium text-white text-sm">RSI scalp · price target exit</div>
-              <div className="text-xs text-gray-400 mt-1">
-                Buy when RSI(250) crosses below 50 on SOXL. Sell at entry × 1.015 (1.5% target).
-                1% safety stop. Cooldown 5 min.
-              </div>
-            </button>
-            <button
-              onClick={() => handleSeed('rsi-exit')}
-              className="w-full text-left p-3 rounded-lg border border-white/5 hover:border-accent/40 hover:bg-accent/5 transition"
-            >
-              <div className="font-medium text-white text-sm">RSI scalp · RSI exit</div>
-              <div className="text-xs text-gray-400 mt-1">
-                Same buy. Sell when RSI crosses above 55 instead of a fixed target. Demonstrates
-                non-price exit conditions.
-              </div>
-            </button>
-            <button
-              onClick={() => handleSeed('custom')}
-              className="w-full text-left p-3 rounded-lg border border-accent/30 bg-accent/5 hover:border-accent/60 hover:bg-accent/10 transition"
-            >
-              <div className="font-medium text-accent-light text-sm">Custom — build from scratch</div>
-              <div className="text-xs text-gray-400 mt-1">
-                Seeds the user's RSI 50 / 1.5% target setup, but every condition is editable
-                inline. Compose AND/OR groups, mix indicators (rsi/ema/sma/vwap/price), set
-                relative-to-entry exits, etc.
-              </div>
-            </button>
-            <p className="text-[10px] text-gray-500">
-              Seeded strategies start <strong>disabled</strong> in paper mode. Edit ticker/shares
-              after creating, then flip enabled to start watching.
-            </p>
-          </div>
-        </div>
+        </>
       )}
 
       {strategies.length === 0 ? (
@@ -415,12 +418,17 @@ function StrategyDetail({
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
           <div className="text-[9px] uppercase tracking-widest text-gray-500">
             Entry condition
           </div>
-          <div className="text-[9px] text-gray-600 font-mono italic truncate ml-2 max-w-[60%]">
-            {describeCondition(strategy.entry.when)}
+          <div className="flex items-center gap-3">
+            {strategy.tickers.map((t) => (
+              <span key={t} className="flex items-center gap-1.5">
+                <span className="text-[9px] font-mono text-gray-500">{t}</span>
+                <ConditionLiveBadge condition={strategy.entry.when} ticker={t} />
+              </span>
+            ))}
           </div>
         </div>
         <ConditionEditor
@@ -431,12 +439,12 @@ function StrategyDetail({
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
           <div className="text-[9px] uppercase tracking-widest text-gray-500">
             Exit condition
           </div>
           <div className="text-[9px] text-gray-600 font-mono italic truncate ml-2 max-w-[60%]">
-            {describeCondition(strategy.exit.when)}
+            evaluates with entry_price set when in_position
           </div>
         </div>
         <ConditionEditor
