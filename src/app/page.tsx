@@ -5,7 +5,7 @@ import { MainLayout, Drawer } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { OpenPositions, SignalRadar } from '@/components/Dashboard';
+import { OpenPositions, SignalRadar, GuardrailIndicator } from '@/components/Dashboard';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -17,7 +17,7 @@ import {
 } from '@/components/Panels';
 import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useStrategyEngine } from '@/hooks';
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
-import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch } from '@/components/Strategy';
+import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
 import { useTradeStore, usePriceStore, useSettingsStore } from '@/store';
 import {
@@ -55,7 +55,8 @@ type DrawerView =
   | 'settings'
   | 'newTrade'
   | 'strategies'
-  | 'backtest';
+  | 'backtest'
+  | 'journal';
 
 const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle: string }> = {
   trades: { title: 'Trade History', subtitle: 'All open and closed trades' },
@@ -67,6 +68,7 @@ const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle
   newTrade: { title: 'New Trade', subtitle: 'Log a position' },
   strategies: { title: 'Strategies', subtitle: 'Composable buy/sell rules engine' },
   backtest: { title: 'Backtest', subtitle: 'Validate a strategy on historical data' },
+  journal: { title: 'Trade journal', subtitle: 'Every paper trade with chart-context snapshots' },
 };
 
 export default function CommandCenterPage() {
@@ -92,9 +94,17 @@ export default function CommandCenterPage() {
   const chartRange = storeHydrated ? settings.chartSettings?.range || '1d' : '1d';
   const refreshInterval = storeHydrated ? settings.refreshInterval : 1000;
   const indicators = storeHydrated ? settings.indicators ?? {} : {};
+  const extendedHours = storeHydrated ? settings.guardrails?.extendedHours ?? false : false;
   const toggleIndicator = (key: 'ema20' | 'ema50' | 'vwap' | 'bollinger') =>
     updateSettings({
       indicators: { ...(settings.indicators ?? {}), [key]: !(settings.indicators?.[key] ?? false) },
+    });
+  const toggleExtendedHours = () =>
+    updateSettings({
+      guardrails: {
+        ...(settings.guardrails ?? {}),
+        extendedHours: !(settings.guardrails?.extendedHours ?? false),
+      },
     });
 
   // Fetch data for every potential ticker (hooks must be unconditional)
@@ -105,6 +115,7 @@ export default function CommandCenterPage() {
     refreshInterval,
     enabled: hydrated && watchlist.includes(ticker),
     rsiConfig,
+    includePrePost: extendedHours,
   });
 
   const soxl = usePriceData(tickerHookConfig('SOXL'));
@@ -129,6 +140,7 @@ export default function CommandCenterPage() {
     refreshInterval,
     enabled: hydrated && !knownTickers.includes(selectedTicker),
     rsiConfig,
+    includePrePost: extendedHours,
   });
 
   const tickerDataMap: Record<string, ReturnType<typeof usePriceData>> = {
@@ -292,9 +304,10 @@ export default function CommandCenterPage() {
             </div>
           </div>
 
-          {/* Right: kill switch + day P&L + actions */}
+          {/* Right: kill switch + guardrails + day P&L + actions */}
           <div className="flex items-center gap-3">
             <KillSwitch />
+            <GuardrailIndicator dayPnL={dayPnL} />
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/5">
               <span className="text-[10px] uppercase tracking-widest text-gray-500">
                 Day P&L
@@ -440,6 +453,13 @@ export default function CommandCenterPage() {
                     </button>
                   ))}
                 </div>
+                <button
+                  onClick={toggleExtendedHours}
+                  className={`chip ${extendedHours ? 'active' : ''} px-2.5`}
+                  title="Include pre-market and after-hours candles"
+                >
+                  EXT
+                </button>
                 <div className="chip-group" title="Indicator overlays">
                   <button
                     onClick={() => toggleIndicator('ema20')}
@@ -561,9 +581,10 @@ export default function CommandCenterPage() {
           </div>
 
           {/* Quick action launchpad */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+          <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
             <ActionTile icon="strategies" label="Strategies" onClick={() => setDrawer('strategies')} highlight />
             <ActionTile icon="backtest" label="Backtest" onClick={() => setDrawer('backtest')} highlight />
+            <ActionTile icon="journal" label="Journal" onClick={() => setDrawer('journal')} />
             <ActionTile icon="trades" label="Trades" onClick={() => setDrawer('trades')} />
             <ActionTile icon="analytics" label="Analytics" onClick={() => setDrawer('analytics')} />
             <ActionTile icon="scanner" label="Scanner" onClick={() => setDrawer('scanner')} />
@@ -606,10 +627,11 @@ export default function CommandCenterPage() {
         onClose={() => setDrawer(null)}
         title={drawerInfo?.title}
         subtitle={drawerInfo?.subtitle}
-        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' || drawer === 'strategies' || drawer === 'backtest' ? 'xl' : 'lg'}
+        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' || drawer === 'strategies' || drawer === 'backtest' || drawer === 'journal' ? 'xl' : 'lg'}
       >
         {drawer === 'strategies' && <StrategiesPanel />}
         {drawer === 'backtest' && <BacktestPanel />}
+        {drawer === 'journal' && <JournalPanel />}
         {drawer === 'trades' && <TradesPanel />}
         {drawer === 'analytics' && <AnalyticsPanel />}
         {drawer === 'scanner' && <ScannerPanel />}
@@ -865,7 +887,7 @@ function ActionTile({
   onClick,
   highlight,
 }: {
-  icon: 'strategies' | 'backtest' | 'trades' | 'analytics' | 'scanner' | 'calc' | 'alerts' | 'settings';
+  icon: 'strategies' | 'backtest' | 'journal' | 'trades' | 'analytics' | 'scanner' | 'calc' | 'alerts' | 'settings';
   label: string;
   onClick: () => void;
   highlight?: boolean;
@@ -879,6 +901,11 @@ function ActionTile({
     backtest: (
       <>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12a9 9 0 1018 0 9 9 0 00-18 0zM12 6v6l4 2" />
+      </>
+    ),
+    journal: (
+      <>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
       </>
     ),
     trades: (

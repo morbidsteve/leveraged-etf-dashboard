@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 export { useStrategyStore } from './strategyStore';
 export { usePaperStore } from './paperStore';
-export type { PaperEntry, PaperTrade } from './paperStore';
+export type { PaperEntry, PaperTrade, TradeSnapshot } from './paperStore';
 import {
   Trade,
   TradeEntry,
@@ -348,6 +348,11 @@ export const useSettingsStore = create<SettingsState>()(
           vwap: false,
           bollinger: false,
           macd: false,
+        },
+        guardrails: {
+          maxTradesPerDay: undefined,    // disabled by default
+          dailyLossLimit: undefined,
+          extendedHours: false,
         },
       },
       _hasHydrated: false,

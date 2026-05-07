@@ -2,6 +2,25 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { generateId } from '@/lib/calculations';
 
+/**
+ * Compact snapshot data captured at trade entry/exit. Renders as a small
+ * SVG sparkline + RSI line in the journal. Stored as data, not pixels —
+ * lighter on disk and resolution-independent.
+ */
+export interface TradeSnapshot {
+  ticker: string;
+  capturedAt: Date;
+  // last N candles (closes only — keeps it small)
+  closes: { time: number; close: number }[];
+  // last N RSI values (parallel to closes)
+  rsi: { time: number; value: number }[];
+  // Marker for the entry/exit moment within the window
+  markerTime: number;
+  // RSI thresholds at capture time
+  oversold: number;
+  overbought: number;
+}
+
 export interface PaperEntry {
   id: string;
   strategyId: string;
@@ -9,6 +28,7 @@ export interface PaperEntry {
   shares: number;
   entryPrice: number;
   entryAt: Date;
+  entrySnapshot?: TradeSnapshot;
 }
 
 export interface PaperTrade {
@@ -22,6 +42,8 @@ export interface PaperTrade {
   exitAt: Date;
   reason: string;
   realizedPnL: number;
+  entrySnapshot?: TradeSnapshot;
+  exitSnapshot?: TradeSnapshot;
 }
 
 interface PaperState {
@@ -31,7 +53,13 @@ interface PaperState {
 
   setHasHydrated: (s: boolean) => void;
   openPosition: (input: Omit<PaperEntry, 'id'>) => void;
-  closePosition: (strategyId: string, exitPrice: number, exitAt: Date, reason: string) => PaperTrade | null;
+  closePosition: (
+    strategyId: string,
+    exitPrice: number,
+    exitAt: Date,
+    reason: string,
+    exitSnapshot?: TradeSnapshot
+  ) => PaperTrade | null;
   closeAllForStrategy: (strategyId: string) => void;
   reset: () => void;
 }
@@ -52,7 +80,7 @@ export const usePaperStore = create<PaperState>()(
         set((state) => ({ open: [...state.open, entry] }));
       },
 
-      closePosition: (strategyId, exitPrice, exitAt, reason) => {
+      closePosition: (strategyId, exitPrice, exitAt, reason, exitSnapshot) => {
         const open = get().open.find((p) => p.strategyId === strategyId);
         if (!open) return null;
         const realizedPnL = (exitPrice - open.entryPrice) * open.shares;
@@ -67,6 +95,8 @@ export const usePaperStore = create<PaperState>()(
           exitAt,
           reason,
           realizedPnL,
+          entrySnapshot: open.entrySnapshot,
+          exitSnapshot,
         };
         set((state) => ({
           open: state.open.filter((p) => p.strategyId !== strategyId),

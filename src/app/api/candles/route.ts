@@ -8,9 +8,10 @@ export async function GET(request: NextRequest) {
   const symbol = searchParams.get('symbol') || 'TQQQ';
   const interval = searchParams.get('interval') || '1m';
   const range = searchParams.get('range') || '5d';
+  const includePrePost = searchParams.get('includePrePost') === 'true';
 
   try {
-    const url = `${YAHOO_BASE_URL}/${symbol}?interval=${interval}&range=${range}`;
+    const url = `${YAHOO_BASE_URL}/${symbol}?interval=${interval}&range=${range}&includePrePost=${includePrePost}`;
 
     const response = await fetch(url, {
       headers: {

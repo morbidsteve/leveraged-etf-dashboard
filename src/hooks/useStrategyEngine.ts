@@ -6,7 +6,10 @@ import {
   useStrategyStore,
   usePaperStore,
   useSettingsStore,
+  useTradeStore,
 } from '@/store';
+import { evaluateGuardrails } from '@/lib/guardrails';
+import { calculateUnrealizedPnL } from '@/lib/calculations';
 import {
   Strategy,
   Action,
@@ -15,6 +18,7 @@ import {
 } from '@/types/strategy';
 import { tick } from '@/lib/strategy/evaluator';
 import { dispatchAutoOrder } from '@/lib/strategy/autoExecutor';
+import { captureSnapshot } from '@/lib/snapshot';
 import { calculateRSIWithTimestamps } from '@/lib/rsi';
 import { calculateEMA, calculateSMA } from '@/lib/indicators';
 import { playBuyTone, playSellTone } from '@/lib/sound';
@@ -42,6 +46,10 @@ export function useStrategyEngine(opts: {
   const openPosition = usePaperStore((s) => s.openPosition);
   const closePosition = usePaperStore((s) => s.closePosition);
   const globalRsiConfig = useSettingsStore((s) => s.settings.rsiConfig);
+  const guardrailsConfig = useSettingsStore((s) => s.settings.guardrails);
+  const manualTrades = useTradeStore((s) => s.trades);
+  const paperClosed = usePaperStore((s) => s.closed);
+  const livePrices = usePriceStore((s) => s.prices);
 
   // Previous data context per ticker — required for crossing detection
   const prevCtxRef = useRef<Record<string, DataContext | null>>({});
@@ -104,7 +112,44 @@ export function useStrategyEngine(opts: {
         });
       }
 
+      // Compute today's P&L (closed manual + closed paper + open unrealized)
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+      const closedTodayManual = manualTrades
+        .filter((t) => t.status === 'closed' && t.closedAt && new Date(t.closedAt) >= startOfDay)
+        .reduce((s, t) => s + t.realizedPnL, 0);
+      const closedTodayPaper = paperClosed
+        .filter((t) => new Date(t.exitAt) >= startOfDay)
+        .reduce((s, t) => s + t.realizedPnL, 0);
+      const openUnrealized = manualTrades
+        .filter((t) => t.status === 'open')
+        .reduce((s, t) => {
+          const cp = livePrices[t.ticker]?.price || t.avgCost;
+          return s + calculateUnrealizedPnL(t, cp);
+        }, 0);
+      const dayPnL = closedTodayManual + closedTodayPaper + openUnrealized;
+
+      const guard = evaluateGuardrails({
+        manualTrades,
+        paperTrades: paperClosed,
+        dayPnL,
+        maxTradesPerDay: guardrailsConfig?.maxTradesPerDay,
+        dailyLossLimit: guardrailsConfig?.dailyLossLimit,
+        now,
+      });
+
       for (const action of out.actions) {
+        // Guardrail block — entries only (we always allow exits to close positions)
+        if (action.kind === 'enter' && guard.entriesBlocked) {
+          newEvents.push({
+            strategyId: strategy.id,
+            timestamp: now,
+            type: 'state_change',
+            detail: `Guardrail BLOCKED entry: ${guard.blockReason}`,
+          });
+          continue;
+        }
+
         // Notify the user — works in any mode
         if (action.kind === 'enter') {
           playBuyTone();
@@ -125,12 +170,19 @@ export function useStrategyEngine(opts: {
         // Mode-specific dispatch
         if (strategy.mode === 'paper') {
           if (action.kind === 'enter') {
+            const snapshot = captureSnapshot({
+              ticker: action.ticker,
+              candles,
+              rsiConfig,
+              markerTime: Math.floor(ctx.timestamp.getTime() / 1000),
+            });
             openPosition({
               strategyId: strategy.id,
               ticker: action.ticker,
               shares: action.shares,
               entryPrice: ctx.price,
               entryAt: ctx.timestamp,
+              entrySnapshot: snapshot,
             });
             newEvents.push({
               strategyId: strategy.id,
@@ -139,7 +191,13 @@ export function useStrategyEngine(opts: {
               detail: `Paper BUY filled: ${action.shares} @ ${ctx.price.toFixed(2)}`,
             });
           } else {
-            const trade = closePosition(strategy.id, ctx.price, ctx.timestamp, action.reason);
+            const exitSnap = captureSnapshot({
+              ticker: action.ticker,
+              candles,
+              rsiConfig,
+              markerTime: Math.floor(ctx.timestamp.getTime() / 1000),
+            });
+            const trade = closePosition(strategy.id, ctx.price, ctx.timestamp, action.reason, exitSnap);
             if (trade) {
               newEvents.push({
                 strategyId: strategy.id,

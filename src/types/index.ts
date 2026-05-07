@@ -211,6 +211,12 @@ export interface AppSettings {
     bollinger?: boolean;
     macd?: boolean;
   };
+  // Daily guardrails — applied to both manual + auto/paper strategy trades
+  guardrails?: {
+    maxTradesPerDay?: number;        // total fired entries per day; 0/undefined = no cap
+    dailyLossLimit?: number;         // dollar amount; if day P&L drops below -X, strategies pause; 0/undefined = no cap
+    extendedHours?: boolean;         // include pre/after-hours candles
+  };
 }
 
 // API response types

@@ -37,6 +37,62 @@ export default function SettingsPanel() {
 
       <div className="card">
         <div className="card-header">
+          <h2 className="font-medium text-white">Daily guardrails</h2>
+        </div>
+        <div className="card-body space-y-4">
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Hard caps that block <strong>new entries</strong> (manual + strategy paper +
+            auto) for the rest of the day once exceeded. Exits to close existing positions
+            are always allowed. Resets at midnight ET. Set to 0 or empty to disable.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Max trades / day</label>
+              <input
+                type="number"
+                value={settings.guardrails?.maxTradesPerDay ?? ''}
+                onChange={(e) =>
+                  updateSettings({
+                    guardrails: {
+                      ...(settings.guardrails ?? {}),
+                      maxTradesPerDay: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+                className="input w-full font-mono"
+                placeholder="off"
+                min={0}
+              />
+              <p className="text-[10px] text-gray-500 mt-1">Per-day entry cap; lock once hit.</p>
+            </div>
+            <div>
+              <label className="label">Daily loss limit ($)</label>
+              <input
+                type="number"
+                step="50"
+                value={settings.guardrails?.dailyLossLimit ?? ''}
+                onChange={(e) =>
+                  updateSettings({
+                    guardrails: {
+                      ...(settings.guardrails ?? {}),
+                      dailyLossLimit: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+                className="input w-full font-mono"
+                placeholder="off"
+                min={0}
+              />
+              <p className="text-[10px] text-gray-500 mt-1">
+                Pause when day P&L drops to -$X. Enter as positive number.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
           <h2 className="font-medium text-white">General</h2>
         </div>
         <div className="card-body space-y-4">

@@ -12,6 +12,7 @@ interface UsePriceDataOptions {
   refreshInterval?: number;
   enabled?: boolean;
   rsiConfig?: RSIConfig;
+  includePrePost?: boolean;
 }
 
 interface UsePriceDataReturn {
@@ -30,6 +31,7 @@ export function usePriceData({
   refreshInterval = 1000, // 1 second default
   enabled = true,
   rsiConfig = DEFAULT_RSI_CONFIG,
+  includePrePost = false,
 }: UsePriceDataOptions): UsePriceDataReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +58,9 @@ export function usePriceData({
       // Fetch quote and candles in parallel
       const [quoteRes, candlesRes] = await Promise.all([
         fetch(`/api/quote?symbol=${ticker}`),
-        fetch(`/api/candles?symbol=${ticker}&interval=${interval}&range=${range}`),
+        fetch(
+          `/api/candles?symbol=${ticker}&interval=${interval}&range=${range}&includePrePost=${includePrePost}`
+        ),
       ]);
 
       if (!quoteRes.ok) throw new Error('Failed to fetch quote');
@@ -83,7 +87,7 @@ export function usePriceData({
     } finally {
       setIsLoading(false);
     }
-  }, [ticker, interval, range, enabled, rsiConfig, setPrice, setCandles, setRSIData]);
+  }, [ticker, interval, range, enabled, rsiConfig, includePrePost, setPrice, setCandles, setRSIData]);
 
   // Initial fetch
   useEffect(() => {
