@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePriceData, useHydration, useStoreHydration, useAlertEngine } from '@/hooks';
-import { useSettingsStore, usePriceStore } from '@/store';
+import { useSettingsStore, usePriceStore, useTradeStore } from '@/store';
 import { DEFAULT_RSI_CONFIG, getRSIColor } from '@/lib/rsi';
-import { formatPrice, formatPercent } from '@/lib/calculations';
+import { formatPrice, formatPercent, formatCurrency } from '@/lib/calculations';
 import { NotificationPermissionBadge } from '@/components/Alerts';
 
 /**
@@ -48,6 +48,19 @@ export default function WatchPage() {
 
   const prices = usePriceStore((s) => s.prices);
   const rsiData = usePriceStore((s) => s.rsiData);
+  const trades = useTradeStore((s) => s.trades);
+  const updateSettings = useSettingsStore((s) => s.updateSettings);
+  const killSwitch = settings.killSwitch ?? false;
+  const openPositions = useMemo(
+    () => trades.filter((t) => t.status === 'open'),
+    [trades]
+  );
+  const totalUnrealized = useMemo(() => {
+    return openPositions.reduce((sum, t) => {
+      const cur = prices[t.ticker]?.price ?? t.avgCost;
+      return sum + (cur - t.avgCost) * t.totalShares;
+    }, 0);
+  }, [openPositions, prices]);
 
   const live = prices[selected];
   const rsi = rsiData[selected];
@@ -90,24 +103,75 @@ export default function WatchPage() {
 
   return (
     <div className={`min-h-screen ${bgClass} transition-colors duration-700 flex flex-col`}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-ink/80 backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <span className="live-dot" />
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-            Watch
-          </span>
+      {/* Header — left: live + kill switch, right: notif + dashboard */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-ink/80 backdrop-blur-md gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="live-dot" />
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+              Watch
+            </span>
+          </div>
+          <button
+            onClick={() => updateSettings({ killSwitch: !killSwitch })}
+            className={`text-[11px] font-mono uppercase tracking-widest px-2.5 py-1.5 rounded border min-h-[32px] ${
+              killSwitch
+                ? 'bg-loss/20 border-loss/50 text-loss'
+                : 'bg-profit/15 border-profit/40 text-profit'
+            }`}
+            title="Master kill switch — blocks all auto-mode Schwab orders"
+          >
+            {killSwitch ? '🚫 KILL' : '● LIVE'}
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <NotificationPermissionBadge />
           <a
             href="/"
-            className="text-[10px] uppercase tracking-widest text-gray-400 hover:text-white"
+            className="text-[10px] uppercase tracking-widest text-gray-400 hover:text-white py-1.5 px-1"
           >
-            Full dashboard →
+            Full →
           </a>
         </div>
       </div>
+
+      {/* Open positions strip */}
+      {openPositions.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-4 py-2 border-b border-white/5 bg-white/[0.01]">
+          <div className="text-[9px] uppercase tracking-widest text-gray-500 shrink-0">
+            Open ({openPositions.length})
+          </div>
+          {openPositions.map((t) => {
+            const cur = prices[t.ticker]?.price ?? t.avgCost;
+            const pnl = (cur - t.avgCost) * t.totalShares;
+            const pct = ((cur - t.avgCost) / t.avgCost) * 100;
+            const win = pnl >= 0;
+            return (
+              <button
+                key={t.id}
+                onClick={() => watchlist.includes(t.ticker) && setSelected(t.ticker)}
+                className={`shrink-0 rounded-lg border px-2 py-1 text-left ${
+                  win ? 'border-profit/30 bg-profit/5' : 'border-loss/30 bg-loss/5'
+                }`}
+              >
+                <div className="text-[11px] font-bold text-white">{t.ticker}</div>
+                <div
+                  className={`text-[10px] font-mono ${win ? 'text-profit' : 'text-loss'}`}
+                >
+                  {win ? '+' : ''}{pct.toFixed(2)}%
+                </div>
+              </button>
+            );
+          })}
+          <div
+            className={`ml-auto shrink-0 text-xs font-mono font-bold ${
+              totalUnrealized >= 0 ? 'text-profit' : 'text-loss'
+            }`}
+          >
+            {formatCurrency(totalUnrealized)}
+          </div>
+        </div>
+      )}
 
       {/* Big verdict */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 text-center space-y-4">

@@ -1074,7 +1074,7 @@ function LaunchSection({ label, children }: { label: string; children: React.Rea
       <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-1.5">
         {label}
       </div>
-      <div className="grid grid-cols-3 gap-2">{children}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-2">{children}</div>
     </div>
   );
 }
@@ -1169,12 +1169,12 @@ function ActionTile({
   return (
     <button
       onClick={onClick}
-      className={`card glass-hover p-3 flex flex-col items-center justify-center gap-1.5 group ${
+      className={`card glass-hover p-3 sm:p-3 flex flex-col items-center justify-center gap-1.5 group min-h-[56px] sm:min-h-[64px] active:scale-[0.97] transition-transform ${
         highlight ? 'border-accent/40 bg-accent/5' : ''
       }`}
     >
       <svg
-        className={`w-5 h-5 transition-colors ${
+        className={`w-6 h-6 sm:w-5 sm:h-5 transition-colors ${
           highlight ? 'text-accent-light' : 'text-gray-400 group-hover:text-white'
         }`}
         fill="none"
