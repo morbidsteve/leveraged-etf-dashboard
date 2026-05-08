@@ -26,6 +26,7 @@ import {
 import { detectPatterns } from '@/lib/patterns';
 import StopDragHandles from './StopDragHandles';
 import SessionBands from './SessionBands';
+import { perfStart } from '@/lib/perf';
 
 interface TradeMarker {
   time: number; // Unix timestamp in seconds
@@ -658,6 +659,8 @@ export default function CandlestickChart({
     // Wait for both chart and data to be ready
     if (!chartReady || !candlestickSeriesRef.current || candles.length === 0) return;
 
+    const t = perfStart('chart.candleUpdate');
+
     const candleData: CandlestickData[] = candles.map((candle) => ({
       time: candle.time as Time,
       open: candle.open,
@@ -667,6 +670,9 @@ export default function CandlestickChart({
     }));
 
     candlestickSeriesRef.current.setData(candleData);
+    // Record after primary setData so we capture the dominant cost;
+    // overlay indicators below run with their own timer if needed.
+    t.end();
 
     // Update volume
     if (volumeSeriesRef.current && showVolume) {
