@@ -247,6 +247,8 @@ export interface AppSettings {
     vwap?: boolean;
     bollinger?: boolean;
     macd?: boolean;
+    /** Show candlestick patterns as chart markers. */
+    patterns?: boolean;
   };
   // Daily guardrails — applied to both manual + auto/paper strategy trades
   guardrails?: {

@@ -608,6 +608,7 @@ export default function CommandCenterPage() {
                     showEMA50={indicators.ema50}
                     showVWAP={indicators.vwap}
                     showBollinger={indicators.bollinger}
+                    showPatterns={indicators.patterns ?? false}
                     stopLines={trades
                       .filter((t) => t.status === 'open' && t.ticker === selectedTicker && t.stopPrice && t.stopPrice > 0)
                       .map((t) => ({ ticker: t.ticker, price: t.stopPrice!, tradeId: t.id }))}

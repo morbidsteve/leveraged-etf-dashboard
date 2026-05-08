@@ -23,6 +23,7 @@ import {
   calculateVWAP,
   calculateBollingerBands,
 } from '@/lib/indicators';
+import { detectPatterns } from '@/lib/patterns';
 
 interface TradeMarker {
   time: number; // Unix timestamp in seconds
@@ -58,6 +59,8 @@ interface CandlestickChartProps {
   stopLines?: Array<{ ticker: string; price: number; tradeId: string }>;
   /** Entry-price reference lines per ticker. */
   entryLines?: Array<{ ticker: string; price: number; tradeId: string }>;
+  /** Show candlestick pattern markers (hammer, engulfing, etc.). */
+  showPatterns?: boolean;
 }
 
 // Helper to extract trade markers from trades
@@ -176,6 +179,7 @@ export default function CandlestickChart({
   showBollinger = false,
   stopLines = [],
   entryLines = [],
+  showPatterns = false,
 }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
@@ -785,6 +789,24 @@ export default function CandlestickChart({
           color: marker.type === 'buy' ? '#22c55e' : '#ef4444',
           shape: marker.type === 'buy' ? 'arrowUp' : 'arrowDown',
           text: `${marker.type === 'buy' ? 'B' : 'S'} ${marker.shares}@${marker.price.toFixed(2)}`,
+        });
+      }
+    }
+
+    // Add candlestick pattern markers
+    if (showPatterns && candles.length > 0) {
+      const matches = detectPatterns(candles);
+      // Only show high-confidence reversals (>0.5) to avoid clutter
+      const filtered = matches.filter((m) => m.confidence >= 0.5);
+      for (const m of filtered) {
+        const isBull = m.bias === 'bullish';
+        const isBear = m.bias === 'bearish';
+        markers.push({
+          time: m.time as Time,
+          position: isBull ? 'belowBar' : isBear ? 'aboveBar' : 'inBar',
+          color: isBull ? '#22c55e' : isBear ? '#ef4444' : '#a78bfa',
+          shape: 'square',
+          text: m.pattern.replace(/_/g, ' '),
         });
       }
     }

@@ -31,6 +31,7 @@ interface DynamicChartProps {
   showBollinger?: boolean;
   stopLines?: Array<{ ticker: string; price: number; tradeId: string }>;
   entryLines?: Array<{ ticker: string; price: number; tradeId: string }>;
+  showPatterns?: boolean;
 }
 
 export default function DynamicChart(props: DynamicChartProps) {
