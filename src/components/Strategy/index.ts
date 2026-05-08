@@ -12,3 +12,4 @@ export { default as ConditionLiveBadge } from './ConditionLiveBadge';
 export { default as OrderAuditView } from './OrderAuditView';
 export { default as WorkerStatusPanel } from './WorkerStatusPanel';
 export { default as StrategyExplainerCard } from './StrategyExplainerCard';
+export { default as SchwabSyncCard } from './SchwabSyncCard';

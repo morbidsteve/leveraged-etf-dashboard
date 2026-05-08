@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSettingsStore, useTradeStore, DEFAULT_SCANNER_SETTINGS } from '@/store';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 import { Trade } from '@/types';
-import { SchwabConnectCard, WorkerStatusPanel } from '@/components/Strategy';
+import { SchwabConnectCard, WorkerStatusPanel, SchwabSyncCard } from '@/components/Strategy';
 import { downloadBundle, applyBundle } from '@/lib/exportImport';
 import { Tabs, TabPanel, TabDef } from '@/components/UI';
 import WatchlistManager from './WatchlistManager';
@@ -149,6 +149,7 @@ export default function SettingsPanel() {
       <TabPanel id="broker" active={activeTab}>
         <div className="space-y-4">
           <SchwabConnectCard />
+          <SchwabSyncCard />
           <WorkerStatusPanel />
           <EngineDiagnosticsCard />
           <ApiKeysCard />

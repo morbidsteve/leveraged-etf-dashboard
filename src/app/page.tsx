@@ -23,6 +23,7 @@ import ShortcutsHelp from '@/components/ShortcutsHelp';
 import PositionActionModal, { PositionActionTarget } from '@/components/PositionActionModal';
 import ThemeManager from '@/components/ThemeManager';
 import LayoutSwitcher from '@/components/LayoutSwitcher';
+import StrategyChat from '@/components/StrategyChat';
 import { ToastHost } from '@/components/UI';
 import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel, StrategyMonitor } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
@@ -739,6 +740,9 @@ export default function CommandCenterPage() {
         target={positionTarget}
         onClose={() => setPositionTarget(null)}
       />
+
+      {/* STRATEGY CHAT — bottom-right floating assistant */}
+      <StrategyChat />
 
       {/* MOBILE-ONLY BOTTOM TAB BAR */}
       <BottomTabBar activeDrawer={drawer} />

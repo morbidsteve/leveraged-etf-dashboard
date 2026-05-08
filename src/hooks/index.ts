@@ -7,3 +7,4 @@ export { useOptionsQuotes } from './useOptionsQuotes';
 export { useStrategyEngine } from './useStrategyEngine';
 export { useMultiTfData } from './useMultiTfData';
 export { usePositionAlertEngine } from './usePositionAlertEngine';
+export { useOrderStatusPoller } from './useOrderStatusPoller';
