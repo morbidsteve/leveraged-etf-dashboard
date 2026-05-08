@@ -160,12 +160,15 @@ export function computeConcentration(
   const avgCorr = weightedDenom > 0 ? weightedCorrSum / weightedDenom : 0;
 
   // Composite risk: penalize HHI and avg correlation together. A
-  // single 100% position scores 1.0; two perfectly-uncorrelated 50/50
-  // positions score 0.5 + 0 corr = ~0.25.
-  const composite = hhi * 0.6 + avgCorr * 0.4;
+  // single 100% position is always 'extreme' regardless of correlation
+  // (there are no pairs to correlate). Otherwise blend HHI + avgCorr.
+  const composite = hhi * 0.8 + avgCorr * 0.2;
   let riskLabel: ConcentrationResult['riskLabel'];
   let riskNote: string;
-  if (composite < 0.3) {
+  if (largestShare >= 0.95) {
+    riskLabel = 'extreme';
+    riskNote = 'Effectively one bet. A bad day on the underlying is unmitigated.';
+  } else if (composite < 0.3) {
     riskLabel = 'low';
     riskNote = 'Diversified across uncorrelated names.';
   } else if (composite < 0.5) {
