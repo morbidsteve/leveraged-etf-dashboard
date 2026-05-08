@@ -123,11 +123,21 @@ export async function getTransactions(
 
 // ── Order placement (kept tight; expanded in Sprint 5) ─────────────────
 
+/**
+ * Schwab order session.
+ *  NORMAL = regular hours (9:30–16:00 ET) — only NORMAL allows MARKET orders
+ *  AM     = pre-market (7:00–9:25 ET) — LIMIT only
+ *  PM     = after-hours (16:05–20:00 ET) — LIMIT only
+ *  SEAMLESS = order works across all sessions (must be LIMIT, GTC)
+ */
+export type SchwabOrderSessionType = 'NORMAL' | 'AM' | 'PM' | 'SEAMLESS';
+
 export interface BuyLimitOrder {
   symbol: string;
   shares: number;
   limitPrice: number;
   duration?: 'DAY' | 'GOOD_TILL_CANCEL';
+  session?: SchwabOrderSessionType;
 }
 
 export interface SellLimitOrder {
@@ -135,6 +145,7 @@ export interface SellLimitOrder {
   shares: number;
   limitPrice: number;
   duration?: 'DAY' | 'GOOD_TILL_CANCEL';
+  session?: SchwabOrderSessionType;
 }
 
 export interface SellStopOrder {
@@ -142,12 +153,13 @@ export interface SellStopOrder {
   shares: number;
   stopPrice: number;
   duration?: 'DAY' | 'GOOD_TILL_CANCEL';
+  session?: SchwabOrderSessionType;
 }
 
 export function buildBuyLimitOrder(o: BuyLimitOrder) {
   return {
     orderType: 'LIMIT',
-    session: 'NORMAL',
+    session: o.session ?? 'NORMAL',
     duration: o.duration ?? 'DAY',
     orderStrategyType: 'SINGLE',
     price: Number(o.limitPrice.toFixed(2)),
@@ -164,7 +176,7 @@ export function buildBuyLimitOrder(o: BuyLimitOrder) {
 export function buildSellLimitOrder(o: SellLimitOrder) {
   return {
     orderType: 'LIMIT',
-    session: 'NORMAL',
+    session: o.session ?? 'NORMAL',
     duration: o.duration ?? 'DAY',
     orderStrategyType: 'SINGLE',
     price: Number(o.limitPrice.toFixed(2)),
@@ -181,7 +193,9 @@ export function buildSellLimitOrder(o: SellLimitOrder) {
 export function buildSellStopOrder(o: SellStopOrder) {
   return {
     orderType: 'STOP',
-    session: 'NORMAL',
+    // STOP orders during AM/PM are not accepted by Schwab — fall back
+    // to NORMAL since stops typically rest GTC anyway.
+    session: o.session && o.session !== 'AM' && o.session !== 'PM' ? o.session : 'NORMAL',
     duration: o.duration ?? 'GOOD_TILL_CANCEL',
     orderStrategyType: 'SINGLE',
     stopPrice: Number(o.stopPrice.toFixed(2)),
@@ -211,10 +225,14 @@ export function buildBracketOcoOrder(o: {
   targetLimitPrice: number;
   stopPrice: number;
   duration?: 'DAY' | 'GOOD_TILL_CANCEL';
+  /** Session for the parent BUY leg. Children always use NORMAL since
+   * Schwab won't accept extended-hours STOP orders. */
+  session?: SchwabOrderSessionType;
 }) {
+  const parentSession = o.session ?? 'NORMAL';
   return {
     orderType: 'LIMIT',
-    session: 'NORMAL',
+    session: parentSession,
     duration: o.duration ?? 'DAY',
     orderStrategyType: 'TRIGGER',
     price: Number(o.buyLimitPrice.toFixed(2)),

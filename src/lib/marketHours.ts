@@ -102,3 +102,19 @@ export function describeSession(s: MarketSession): string {
     case 'closed': return 'Closed';
   }
 }
+
+/**
+ * Map a MarketSession to the Schwab order `session` field. Schwab
+ * disallows MARKET orders during AM / PM and rejects any extended-hours
+ * order placed with `session: 'NORMAL'`.
+ *
+ * Returns null when markets are closed — caller should reject the order.
+ */
+export function schwabOrderSession(s: MarketSession): 'NORMAL' | 'AM' | 'PM' | null {
+  switch (s) {
+    case 'open': return 'NORMAL';
+    case 'pre': return 'AM';
+    case 'post': return 'PM';
+    case 'closed': return null;
+  }
+}

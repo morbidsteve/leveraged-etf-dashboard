@@ -20,6 +20,7 @@ import {
 import { tick } from '@/lib/strategy/evaluator';
 import { dispatchAutoOrder } from '@/lib/strategy/autoExecutor';
 import { trackOrderToTerminal } from '@/lib/strategy/orderTracker';
+import { getMarketSession } from '@/lib/marketHours';
 import { captureSnapshot } from '@/lib/snapshot';
 import { calculateRSIWithTimestamps } from '@/lib/rsi';
 import { calculateEMA, calculateSMA } from '@/lib/indicators';
@@ -88,9 +89,17 @@ export function useStrategyEngine(opts: {
     if (enabled.length === 0) return;
 
     const now = new Date();
+    const currentSession = getMarketSession(now);
     const newEvents: Omit<StrategyEvent, 'id'>[] = [];
 
     for (const strategy of enabled) {
+      // Per-strategy session gate. Default = ['open'] (regular hours
+      // only). When the current market session isn't in the allow list,
+      // we skip evaluation entirely — engine still runs but emits no
+      // events for this strategy until the next allowed session.
+      const allowedSessions = strategy.sessions ?? ['open'];
+      if (currentSession === 'closed') continue;
+      if (!allowedSessions.includes(currentSession)) continue;
       // Cross-asset support — build a map of every external ticker
       // referenced anywhere in the strategy's conditions. Each is fetched
       // from the live price/candles store and folded into byTicker on the

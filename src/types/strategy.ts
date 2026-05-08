@@ -116,6 +116,13 @@ export interface Strategy {
   };
 
   cooldownMinutes: number;
+  /**
+   * Which market sessions this strategy is allowed to fire in. Default
+   * is `['open']` (regular hours only, 9:30–16:00 ET). Including 'pre'
+   * or 'post' lets the engine evaluate during 4:00–9:30 / 16:00–20:00 ET.
+   * The engine + Schwab order session both gate on this.
+   */
+  sessions?: Array<'pre' | 'open' | 'post'>;
   createdAt: Date;
   updatedAt: Date;
 }

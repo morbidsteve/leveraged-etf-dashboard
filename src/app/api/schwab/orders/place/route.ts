@@ -7,6 +7,7 @@ import {
 } from '@/lib/schwab/client';
 import { getActiveAccountHash } from '@/lib/schwab/account';
 import { checkGuardrails, recordAudit } from '@/lib/schwab/orderGuardrails';
+import { getMarketSession, schwabOrderSession } from '@/lib/marketHours';
 
 interface PlaceOrderBody {
   // The action shape from the strategy engine:
@@ -36,6 +37,25 @@ export async function POST(request: NextRequest) {
   }
 
   const buffer = (body.bufferPct ?? 0.2) / 100; // default 0.2%
+
+  // Determine current market session for the order. Schwab rejects
+  // NORMAL-session orders during pre/post hours; we map the session
+  // here and refuse to send orders when markets are closed.
+  const session = getMarketSession();
+  const orderSession = schwabOrderSession(session);
+  if (!orderSession) {
+    await recordAudit({
+      outcome: 'rejected',
+      symbol: body.symbol,
+      shares: body.shares,
+      estimatedPrice: body.livePrice ?? body.limitPrice ?? 0,
+      reason: 'markets_closed',
+    });
+    return NextResponse.json(
+      { error: 'Markets are closed — order not submitted.' },
+      { status: 403 }
+    );
+  }
 
   // Server-side guardrails — runs BEFORE auth/account resolution so we
   // never even hit Schwab if the order is over a configured cap.
@@ -86,6 +106,7 @@ export async function POST(request: NextRequest) {
         shares: body.shares,
         limitPrice: submittedPrice,
         duration: body.duration ?? 'DAY',
+        session: orderSession,
       });
     } else if (body.action === 'exit_target') {
       // Resting limit at exact target price
@@ -101,6 +122,7 @@ export async function POST(request: NextRequest) {
         shares: body.shares,
         limitPrice: submittedPrice,
         duration: body.duration ?? 'GOOD_TILL_CANCEL',
+        session: orderSession,
       });
     } else if (body.action === 'exit_signal') {
       if (!body.livePrice || body.livePrice <= 0) {
@@ -116,6 +138,7 @@ export async function POST(request: NextRequest) {
         shares: body.shares,
         limitPrice: submittedPrice,
         duration: body.duration ?? 'DAY',
+        session: orderSession,
       });
     } else {
       return NextResponse.json(
@@ -151,6 +174,8 @@ export async function POST(request: NextRequest) {
       action: body.action,
       symbol: body.symbol,
       shares: body.shares,
+      session: orderSession,
+      marketSession: session,
       ordersToday: guard.ordersToday + 1,
     });
   } catch (e) {

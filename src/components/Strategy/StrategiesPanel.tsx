@@ -477,6 +477,35 @@ function StrategyDetail({
         </Field>
       </div>
 
+      <Field label="Sessions">
+        <div className="flex items-center gap-3 flex-wrap">
+          {(['pre', 'open', 'post'] as const).map((s) => {
+            const enabled = (strategy.sessions ?? ['open']).includes(s);
+            const label = s === 'pre' ? 'Pre-market' : s === 'open' ? 'Regular' : 'After-hours';
+            return (
+              <label key={s} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enabled}
+                  onChange={(e) => {
+                    const cur = strategy.sessions ?? ['open'];
+                    const next = e.target.checked
+                      ? Array.from(new Set([...cur, s]))
+                      : cur.filter((x) => x !== s);
+                    onUpdate({ sessions: next.length ? (next as ('pre' | 'open' | 'post')[]) : ['open'] });
+                  }}
+                  className="w-3.5 h-3.5"
+                />
+                <span className={enabled ? 'text-white' : 'text-gray-500'}>{label}</span>
+              </label>
+            );
+          })}
+          <span className="text-[9px] text-gray-600 uppercase tracking-widest ml-auto">
+            Engine + Schwab session both gate on this
+          </span>
+        </div>
+      </Field>
+
       <div className="flex items-center justify-end -mb-1">
         <button
           onClick={() => setShowTreeView((v) => !v)}
