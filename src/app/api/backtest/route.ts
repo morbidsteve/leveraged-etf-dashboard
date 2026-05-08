@@ -11,7 +11,13 @@ const ALLOWED_RANGES = new Set([
 ]);
 
 export async function POST(request: NextRequest) {
-  let body: { strategy: Strategy; ticker?: string; interval?: string; range?: string };
+  let body: {
+    strategy: Strategy;
+    ticker?: string;
+    interval?: string;
+    range?: string;
+    includePrePost?: boolean;
+  };
   try {
     body = await request.json();
   } catch {
@@ -45,7 +51,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const url = `${YAHOO_BASE_URL}/${encodeURIComponent(ticker)}?interval=${interval}&range=${range}&includePrePost=false`;
+    // Default extended-hours inclusion based on the strategy's session
+    // allow-list — if it opts into pre/post we need that data to backtest.
+    const stratSessions = body.strategy.sessions ?? ['open'];
+    const stratWantsPrePost =
+      stratSessions.includes('pre') || stratSessions.includes('post');
+    const includePrePost = body.includePrePost ?? stratWantsPrePost;
+    const url = `${YAHOO_BASE_URL}/${encodeURIComponent(ticker)}?interval=${interval}&range=${range}&includePrePost=${includePrePost}`;
     const response = await fetch(url, {
       headers: {
         'User-Agent':

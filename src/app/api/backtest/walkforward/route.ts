@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     range?: string;
     inSampleBars?: number;
     outOfSampleBars?: number;
+    includePrePost?: boolean;
   };
   try {
     body = await request.json();
@@ -38,8 +39,14 @@ export async function POST(request: NextRequest) {
   try {
     // Import server-side libs lazily
     const { runWalkForward } = await import('@/lib/strategy/walkForward');
+    // Pre/post inclusion follows the strategy's sessions field unless caller overrides.
+    const stratSessions =
+      ((strategy as { sessions?: Array<'pre' | 'open' | 'post'> })?.sessions) ?? ['open'];
+    const stratWantsPrePost =
+      stratSessions.includes('pre') || stratSessions.includes('post');
+    const includePrePost = body.includePrePost ?? stratWantsPrePost;
     // Fetch candles via Yahoo (same as the backtest endpoint)
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&includePrePost=false`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&includePrePost=${includePrePost}`;
     const r = await fetch(url, {
       headers: { 'User-Agent': 'leveraged-etf-dashboard/1.0' },
       cache: 'no-store',
