@@ -409,6 +409,15 @@ export const useSettingsStore = create<SettingsState>()(
           dailyLossLimit: undefined,
           extendedHours: false,
         },
+        positionAlerts: {
+          enabled: true,
+          takeProfitPct: 2,
+          stopLossPct: -1,
+          soundEnabled: true,
+          toastEnabled: true,
+          browserEnabled: false,
+          cooldownMinutes: 60,
+        },
       },
       _hasHydrated: false,
 

@@ -186,6 +186,159 @@ export default function SettingsPanel() {
           </div>
         </div>
       </div>
+
+      {/* Position auto-alerts (TP/SL from entry) */}
+      <div className="card">
+        <div className="card-header">
+          <h2 className="font-medium text-white">Position auto-alerts</h2>
+          <p className="text-[11px] text-gray-500 mt-1">
+            Notify automatically when any open position moves +X% / -Y% from
+            its average cost. Per-trade overrides available in the position
+            modal. Engine watches live prices and fires once per crossing
+            (per cooldown).
+          </p>
+        </div>
+        <div className="card-body space-y-4">
+          <div className="flex items-center gap-2">
+            <input
+              id="pa-enabled"
+              type="checkbox"
+              checked={settings.positionAlerts?.enabled ?? true}
+              onChange={(e) =>
+                updateSettings({
+                  positionAlerts: {
+                    ...(settings.positionAlerts ?? {
+                      takeProfitPct: 2,
+                      stopLossPct: -1,
+                      soundEnabled: true,
+                      toastEnabled: true,
+                      browserEnabled: false,
+                      cooldownMinutes: 60,
+                    }),
+                    enabled: e.target.checked,
+                  },
+                })
+              }
+            />
+            <label htmlFor="pa-enabled" className="text-sm text-white cursor-pointer">
+              Enable position auto-alerts
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Take-profit % from entry</label>
+              <input
+                type="number"
+                step="0.1"
+                value={settings.positionAlerts?.takeProfitPct ?? 2}
+                onChange={(e) =>
+                  updateSettings({
+                    positionAlerts: {
+                      ...(settings.positionAlerts ?? {
+                        enabled: true,
+                        stopLossPct: -1,
+                        soundEnabled: true,
+                        toastEnabled: true,
+                        browserEnabled: false,
+                        cooldownMinutes: 60,
+                      }),
+                      takeProfitPct: Number(e.target.value),
+                    },
+                  })
+                }
+                className="input w-full font-mono text-profit"
+              />
+              <p className="text-[10px] text-gray-500 mt-1">
+                Fires when price ≥ avgCost × (1 + N/100). E.g. 2 = +2%.
+              </p>
+            </div>
+            <div>
+              <label className="label">Stop-loss % from entry</label>
+              <input
+                type="number"
+                step="0.1"
+                value={settings.positionAlerts?.stopLossPct ?? -1}
+                onChange={(e) =>
+                  updateSettings({
+                    positionAlerts: {
+                      ...(settings.positionAlerts ?? {
+                        enabled: true,
+                        takeProfitPct: 2,
+                        soundEnabled: true,
+                        toastEnabled: true,
+                        browserEnabled: false,
+                        cooldownMinutes: 60,
+                      }),
+                      stopLossPct: Number(e.target.value),
+                    },
+                  })
+                }
+                className="input w-full font-mono text-loss"
+              />
+              <p className="text-[10px] text-gray-500 mt-1">
+                Fires when price ≤ avgCost × (1 + N/100). Use negative.
+              </p>
+            </div>
+          </div>
+          <div>
+            <label className="label">Cooldown (minutes)</label>
+            <input
+              type="number"
+              value={settings.positionAlerts?.cooldownMinutes ?? 60}
+              onChange={(e) =>
+                updateSettings({
+                  positionAlerts: {
+                    ...(settings.positionAlerts ?? {
+                      enabled: true,
+                      takeProfitPct: 2,
+                      stopLossPct: -1,
+                      soundEnabled: true,
+                      toastEnabled: true,
+                      browserEnabled: false,
+                    }),
+                    cooldownMinutes: Math.max(0, Number(e.target.value)),
+                  },
+                })
+              }
+              className="input w-32 font-mono"
+              min={0}
+            />
+            <p className="text-[10px] text-gray-500 mt-1">
+              Don't re-fire within N minutes per trade per side. Auto-resets
+              when price retreats halfway back toward entry.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {(['soundEnabled', 'toastEnabled', 'browserEnabled'] as const).map((channel) => (
+              <label key={channel} className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.positionAlerts?.[channel] ?? false}
+                  onChange={(e) =>
+                    updateSettings({
+                      positionAlerts: {
+                        ...(settings.positionAlerts ?? {
+                          enabled: true,
+                          takeProfitPct: 2,
+                          stopLossPct: -1,
+                          soundEnabled: true,
+                          toastEnabled: true,
+                          browserEnabled: false,
+                          cooldownMinutes: 60,
+                        }),
+                        [channel]: e.target.checked,
+                      },
+                    })
+                  }
+                />
+                <span className="text-xs text-gray-300">
+                  {channel.replace('Enabled', '')}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
       </TabPanel>
 
       <TabPanel id="strategy" active={activeTab}>

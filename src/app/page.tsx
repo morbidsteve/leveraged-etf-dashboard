@@ -5,7 +5,7 @@ import { MainLayout, Drawer, BottomTabBar } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget } from '@/components/Dashboard';
+import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel } from '@/components/Dashboard';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -16,7 +16,7 @@ import {
   NewTradePanel,
   OptionsPanel,
 } from '@/components/Panels';
-import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useAlertRuleEngine, useStrategyEngine } from '@/hooks';
+import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useAlertRuleEngine, useStrategyEngine, usePositionAlertEngine } from '@/hooks';
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
 import CommandPalette from '@/components/CommandPalette';
 import ShortcutsHelp from '@/components/ShortcutsHelp';
@@ -193,6 +193,10 @@ export default function CommandCenterPage() {
   // Mount the custom alert-rule engine — evaluates user-defined ConditionTree
   // rules across their tickers and fires per-channel notifications with cooldown.
   useAlertRuleEngine();
+
+  // Mount the position-alert engine — auto-fires take-profit / stop
+  // notifications when an open position crosses % thresholds from entry.
+  usePositionAlertEngine();
 
   // Read ?d=<drawer> from URL on mount (sidebar redirects from old pages
   // and shareable deep-links land here with a drawer pre-opened). Strip
@@ -646,13 +650,11 @@ export default function CommandCenterPage() {
               </div>
             </div>
 
+            <MultiSignalPanel onSelectTicker={setSelectedTicker} />
+
             <div className="card">
               <div className="card-body">
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
-                  Signal
-                </div>
-                <SignalBadge status={rsiStatus} value={rsiData?.value} />
-                <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-2 text-xs">
                   <Mini label="Win Rate" value={`${portfolioSummary.winRate.toFixed(0)}%`} />
                   <Mini
                     label="Trades"

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useTradeStore, usePaperStore, usePriceStore } from '@/store';
+import { useTradeStore, usePaperStore, usePriceStore, useSettingsStore, useAlertRuleStore } from '@/store';
 import { showToast } from '@/components/UI';
 import { formatCurrency, formatPrice, formatPercent } from '@/lib/calculations';
 
@@ -317,6 +317,17 @@ export default function PositionActionModal({ target, onClose }: Props) {
             </div>
           )}
 
+          {/* Per-position alert overrides (manual only) */}
+          {target.kind === 'manual' && manualTrade && (
+            <PerPositionAlerts
+              tradeId={manualTrade.id}
+              ticker={manualTrade.ticker}
+              avgCost={manualTrade.avgCost}
+              currentTpPct={manualTrade.alertTakeProfitPct}
+              currentSlPct={manualTrade.alertStopLossPct}
+            />
+          )}
+
           {/* Broker toggle (manual + connected) */}
           {target.kind === 'manual' && (
             <div className="pt-2 border-t border-white/5 space-y-2">
@@ -442,6 +453,176 @@ function SummaryStat({
         }`}
       >
         {value}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Per-position alert overrides + ad-hoc rule creation. Embedded in the
+ * position action modal for manual trades.
+ *
+ * Three sections:
+ *  1. Override TP/SL %: per-trade values stored on the Trade object;
+ *     when set, position-alert engine uses them instead of the global default.
+ *  2. Auto-alert preview: shows what price levels the current settings imply
+ *     so the user can sanity-check before walking away.
+ *  3. Ad-hoc alert rule: creates a one-off AlertRule (custom alert)
+ *     keyed to a specific price/RSI level — uses the existing AlertRule
+ *     infrastructure under the hood.
+ */
+function PerPositionAlerts({
+  tradeId,
+  ticker,
+  avgCost,
+  currentTpPct,
+  currentSlPct,
+}: {
+  tradeId: string;
+  ticker: string;
+  avgCost: number;
+  currentTpPct?: number;
+  currentSlPct?: number;
+}) {
+  const updateTrade = useTradeStore((s) => s.updateTrade);
+  const settings = useSettingsStore((s) => s.settings);
+  const addRule = useAlertRuleStore((s) => s.addRule);
+
+  const globalTp = settings.positionAlerts?.takeProfitPct ?? 2;
+  const globalSl = settings.positionAlerts?.stopLossPct ?? -1;
+  const effectiveTp = currentTpPct ?? globalTp;
+  const effectiveSl = currentSlPct ?? globalSl;
+  const tpPrice = avgCost * (1 + effectiveTp / 100);
+  const slPrice = avgCost * (1 + effectiveSl / 100);
+
+  const [tpDraft, setTpDraft] = useState(currentTpPct?.toString() ?? '');
+  const [slDraft, setSlDraft] = useState(currentSlPct?.toString() ?? '');
+
+  // Ad-hoc alert form state
+  const [adhocOpen, setAdhocOpen] = useState(false);
+  const [adhocPct, setAdhocPct] = useState(2);
+  const [adhocDir, setAdhocDir] = useState<'above' | 'below'>('above');
+
+  const saveOverrides = () => {
+    const tp = tpDraft.trim() === '' ? undefined : Number(tpDraft);
+    const sl = slDraft.trim() === '' ? undefined : Number(slDraft);
+    updateTrade(tradeId, {
+      alertTakeProfitPct: tp && Number.isFinite(tp) ? tp : undefined,
+      alertStopLossPct: sl && Number.isFinite(sl) ? sl : undefined,
+    });
+    showToast('Per-position alert thresholds updated');
+  };
+
+  const createAdhocRule = () => {
+    const target = avgCost * (1 + adhocPct / 100);
+    addRule({
+      name: `${ticker} ${adhocDir} ${adhocPct >= 0 ? '+' : ''}${adhocPct}%`,
+      tickers: [ticker],
+      enabled: true,
+      cooldownMinutes: 60,
+      channels: { sound: true, toast: true, browserNotif: false },
+      condition: {
+        type: 'compare',
+        left: { kind: 'price' },
+        op: adhocDir === 'above' ? '>=' : '<=',
+        right: { kind: 'literal', value: Number(target.toFixed(2)) },
+      },
+    });
+    showToast(
+      `Alert created: ${ticker} ${adhocDir} ${formatPrice(target)} (${adhocPct >= 0 ? '+' : ''}${adhocPct}%)`
+    );
+    setAdhocOpen(false);
+  };
+
+  return (
+    <div className="pt-2 border-t border-white/5 space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] uppercase tracking-widest text-gray-500 block">
+          Auto-alert thresholds
+        </label>
+        <span className="text-[9px] text-gray-500 font-mono">
+          {currentTpPct == null && currentSlPct == null ? 'using global default' : 'overridden'}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-0.5">Take-profit %</div>
+          <input
+            type="number"
+            step="0.1"
+            value={tpDraft}
+            onChange={(e) => setTpDraft(e.target.value)}
+            placeholder={`default ${globalTp}`}
+            className="input w-full text-xs py-1 font-mono text-profit"
+          />
+        </div>
+        <div>
+          <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-0.5">Stop-loss %</div>
+          <input
+            type="number"
+            step="0.1"
+            value={slDraft}
+            onChange={(e) => setSlDraft(e.target.value)}
+            placeholder={`default ${globalSl}`}
+            className="input w-full text-xs py-1 font-mono text-loss"
+          />
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] text-gray-500 font-mono leading-relaxed flex-1">
+          Will fire at <span className="text-profit">{formatPrice(tpPrice)}</span> /{' '}
+          <span className="text-loss">{formatPrice(slPrice)}</span>
+        </div>
+        <button onClick={saveOverrides} className="btn btn-outline text-xs">
+          Save overrides
+        </button>
+      </div>
+
+      <div className="pt-1.5 border-t border-white/5">
+        {!adhocOpen ? (
+          <button
+            onClick={() => setAdhocOpen(true)}
+            className="text-[10px] uppercase tracking-widest text-gray-500 hover:text-accent-light"
+          >
+            + Add ad-hoc alert
+          </button>
+        ) : (
+          <div className="space-y-1.5 rounded-lg p-2 bg-white/[0.02] border border-white/5">
+            <div className="text-[10px] uppercase tracking-widest text-gray-500">
+              Ad-hoc alert rule
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-gray-300">Notify when {ticker} price is</span>
+              <select
+                value={adhocDir}
+                onChange={(e) => setAdhocDir(e.target.value as 'above' | 'below')}
+                className="input text-xs py-1"
+              >
+                <option value="above">above</option>
+                <option value="below">below</option>
+              </select>
+              <input
+                type="number"
+                step="0.1"
+                value={adhocPct}
+                onChange={(e) => setAdhocPct(Number(e.target.value))}
+                className="input w-20 text-xs py-1 font-mono text-right"
+              />
+              <span className="text-gray-300">% from entry</span>
+            </div>
+            <div className="text-[10px] text-gray-500 font-mono">
+              = ${(avgCost * (1 + adhocPct / 100)).toFixed(2)}
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={createAdhocRule} className="btn btn-primary text-xs">
+                Create alert rule
+              </button>
+              <button onClick={() => setAdhocOpen(false)} className="btn btn-ghost text-xs">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

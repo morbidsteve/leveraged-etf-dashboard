@@ -8,3 +8,4 @@ export { default as ExposureWarning } from './ExposureWarning';
 export { default as WelcomeCard } from './WelcomeCard';
 export { default as NewsStrip } from './NewsStrip';
 export { default as EarningsWidget } from './EarningsWidget';
+export { default as MultiSignalPanel } from './MultiSignalPanel';

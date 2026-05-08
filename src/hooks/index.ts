@@ -6,3 +6,4 @@ export { useAlertRuleEngine } from './useAlertRuleEngine';
 export { useOptionsQuotes } from './useOptionsQuotes';
 export { useStrategyEngine } from './useStrategyEngine';
 export { useMultiTfData } from './useMultiTfData';
+export { usePositionAlertEngine } from './usePositionAlertEngine';

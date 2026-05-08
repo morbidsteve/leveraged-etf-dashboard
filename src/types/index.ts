@@ -29,6 +29,14 @@ export interface Trade {
   closedAt?: Date;
   /** Per-trade stop price (manual or set via chart drag). */
   stopPrice?: number;
+  /** Per-trade alert overrides — when set, override the global default
+   * position-alert thresholds for this trade. Both are percent of avgCost
+   * (e.g., 2 = +2%, -1 = -1%). */
+  alertTakeProfitPct?: number;
+  alertStopLossPct?: number;
+  /** Bookkeeping for the position-alert engine — last %change at which we
+   * fired so we don't re-fire on every tick. Per-trade. */
+  alertLastFiredPct?: number;
 }
 
 // Portfolio types
@@ -196,6 +204,22 @@ export interface Watchlist {
   tickers: string[];
 }
 
+// Position-alert preferences (per-position auto-notifications from entry)
+export interface PositionAlertSettings {
+  enabled: boolean;
+  /** % above avgCost that fires a take-profit alert (e.g. 2 = +2%). */
+  takeProfitPct: number;
+  /** % below avgCost that fires a stop alert (e.g. -1 = -1%). */
+  stopLossPct: number;
+  /** Notification channels */
+  soundEnabled: boolean;
+  toastEnabled: boolean;
+  browserEnabled: boolean;
+  /** Cooldown in minutes — don't re-fire the same alert for a trade
+   * within this window. */
+  cooldownMinutes: number;
+}
+
 // App state types
 export interface AppSettings {
   theme: 'dark' | 'light';
@@ -229,6 +253,8 @@ export interface AppSettings {
     dailyLossLimit?: number;         // dollar amount; if day P&L drops below -X, strategies pause; 0/undefined = no cap
     extendedHours?: boolean;         // include pre/after-hours candles
   };
+  /** Auto-alert from entry price for every open position. */
+  positionAlerts?: PositionAlertSettings;
 }
 
 // API response types
