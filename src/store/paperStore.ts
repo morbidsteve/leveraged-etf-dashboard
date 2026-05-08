@@ -44,6 +44,10 @@ export interface PaperTrade {
   realizedPnL: number;
   entrySnapshot?: TradeSnapshot;
   exitSnapshot?: TradeSnapshot;
+  /** Free-text journal entry. */
+  notes?: string;
+  /** User-defined tags (e.g. "scalp", "earnings", "FOMC"). */
+  tags?: string[];
 }
 
 interface PaperState {
@@ -65,6 +69,9 @@ interface PaperState {
     exitSnapshot?: TradeSnapshot
   ) => PaperTrade | null;
   closeAllForStrategy: (strategyId: string) => void;
+  /** Update notes / tags on a closed paper trade. */
+  setNotes: (tradeId: string, notes: string) => void;
+  setTags: (tradeId: string, tags: string[]) => void;
   reset: () => void;
 }
 
@@ -122,6 +129,16 @@ export const usePaperStore = create<PaperState>()(
       closeAllForStrategy: (strategyId) =>
         set((state) => ({
           open: state.open.filter((p) => p.strategyId !== strategyId),
+        })),
+
+      setNotes: (tradeId, notes) =>
+        set((state) => ({
+          closed: state.closed.map((t) => (t.id === tradeId ? { ...t, notes } : t)),
+        })),
+
+      setTags: (tradeId, tags) =>
+        set((state) => ({
+          closed: state.closed.map((t) => (t.id === tradeId ? { ...t, tags } : t)),
         })),
 
       reset: () => set({ open: [], closed: [] }),

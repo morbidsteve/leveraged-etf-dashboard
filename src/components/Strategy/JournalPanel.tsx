@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useStrategyStore, usePaperStore } from '@/store';
 import type { PaperTrade, TradeSnapshot } from '@/store';
 import { formatCurrency, formatPrice } from '@/lib/calculations';
@@ -40,16 +41,25 @@ export default function JournalPanel() {
           Every paper trade auto-captures a 60-bar candle + RSI window at entry and exit. Review
           your strategy's actual decisions visually, not just from numbers.
         </p>
-        {closedTrades.length > 0 && (
-          <button
-            onClick={() => {
-              if (confirm(`Clear all ${closedTrades.length} closed paper trades?`)) reset();
-            }}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/journal"
             className="btn btn-ghost text-xs"
+            title="Full journal — paper + manual trades, search, tags"
           >
-            Clear journal
-          </button>
-        )}
+            Open full journal →
+          </Link>
+          {closedTrades.length > 0 && (
+            <button
+              onClick={() => {
+                if (confirm(`Clear all ${closedTrades.length} closed paper trades?`)) reset();
+              }}
+              className="btn btn-ghost text-xs"
+            >
+              Clear journal
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Summary bar */}
@@ -144,6 +154,11 @@ export default function JournalPanel() {
 }
 
 function JournalEntry({ trade, strategyName }: { trade: PaperTrade; strategyName: string }) {
+  const setNotes = usePaperStore((s) => s.setNotes);
+  const setTags = usePaperStore((s) => s.setTags);
+  const [notesDraft, setNotesDraft] = useState(trade.notes ?? '');
+  const [tagInput, setTagInput] = useState('');
+  const tags = trade.tags ?? [];
   const isWin = trade.realizedPnL > 0;
   const pnlPct =
     trade.entryPrice > 0
@@ -216,6 +231,52 @@ function JournalEntry({ trade, strategyName }: { trade: PaperTrade; strategyName
             )}
           </div>
         )}
+
+        <div className="space-y-2 border-t border-white/5 pt-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {tags.map((t) => (
+              <span
+                key={t}
+                className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent/15 border border-accent/30 text-accent-light flex items-center gap-1"
+              >
+                #{t}
+                <button
+                  onClick={() => setTags(trade.id, tags.filter((x) => x !== t))}
+                  className="text-accent-light/60 hover:text-loss"
+                  aria-label="remove tag"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              type="text"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const t = tagInput.trim().replace(/^#/, '');
+                  if (!t || tags.includes(t)) return setTagInput('');
+                  setTags(trade.id, [...tags, t]);
+                  setTagInput('');
+                }
+              }}
+              placeholder="+ tag"
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.03] border border-dashed border-white/15 text-white w-20"
+            />
+          </div>
+          <textarea
+            value={notesDraft}
+            onChange={(e) => setNotesDraft(e.target.value)}
+            onBlur={() => {
+              if (notesDraft !== (trade.notes ?? '')) setNotes(trade.id, notesDraft);
+            }}
+            placeholder="Why did this fire? What's the lesson? (auto-saves on blur)"
+            rows={notesDraft ? Math.min(6, Math.max(2, notesDraft.split('\n').length)) : 2}
+            className="input w-full text-xs py-1.5 leading-snug resize-y"
+          />
+        </div>
 
         <div className="text-[10px] text-gray-600 flex items-center justify-between border-t border-white/5 pt-2">
           <span>
