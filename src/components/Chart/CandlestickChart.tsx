@@ -27,6 +27,7 @@ import { detectPatterns } from '@/lib/patterns';
 import StopDragHandles from './StopDragHandles';
 import SessionBands from './SessionBands';
 import { perfStart } from '@/lib/perf';
+import { anchoredVwap } from '@/lib/anchoredVwap';
 
 interface TradeMarker {
   time: number; // Unix timestamp in seconds
@@ -68,6 +69,12 @@ interface CandlestickChartProps {
   onStopDrag?: (tradeId: string, newPrice: number) => void;
   /** Tint pre-market and after-hours bands behind the candles. */
   showSessionBands?: boolean;
+  /** Unix-seconds anchor for an anchored-VWAP line. Null/undefined = off. */
+  anchoredVwapTime?: number | null;
+  /** When true, the next click on the chart fires onPickAnchor instead of
+   * normal crosshair behavior. Caller flips this on/off. */
+  pickingAnchor?: boolean;
+  onPickAnchor?: (time: number) => void;
 }
 
 // Helper to extract trade markers from trades
@@ -189,6 +196,9 @@ export default function CandlestickChart({
   showPatterns = false,
   onStopDrag,
   showSessionBands = false,
+  anchoredVwapTime = null,
+  pickingAnchor = false,
+  onPickAnchor,
 }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
@@ -211,6 +221,8 @@ export default function CandlestickChart({
   const ema50Ref = useRef<ISeriesApi<any> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vwapRef = useRef<ISeriesApi<any> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anchoredVwapRef = useRef<ISeriesApi<any> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bbUpperRef = useRef<ISeriesApi<any> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -389,6 +401,15 @@ export default function CandlestickChart({
       visible: showVWAP,
       title: 'VWAP',
     });
+    anchoredVwapRef.current = chart.addSeries(LineSeries, {
+      color: '#f59e0b', // amber
+      lineWidth: 2,
+      lineStyle: 0,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      visible: anchoredVwapTime != null,
+      title: 'aVWAP',
+    });
     bbUpperRef.current = chart.addSeries(LineSeries, {
       color: 'rgba(156, 163, 175, 0.7)',
       lineWidth: 1,
@@ -434,6 +455,12 @@ export default function CandlestickChart({
 
       volumeSeriesRef.current = volumeSeries;
     }
+
+    // Handle click for "anchor VWAP here" mode
+    chart.subscribeClick((param) => {
+      if (!pickingAnchor || !onPickAnchor || !param.time) return;
+      onPickAnchor(Number(param.time));
+    });
 
     // Handle crosshair move for tooltip
     chart.subscribeCrosshairMove((param) => {
@@ -707,6 +734,15 @@ export default function CandlestickChart({
       }));
       vwapRef.current.setData(data);
     }
+    if (anchoredVwapTime != null && anchoredVwapRef.current) {
+      const data = anchoredVwap(candles, anchoredVwapTime).map((p) => ({
+        time: p.time as Time,
+        value: p.value,
+      }));
+      anchoredVwapRef.current.setData(data);
+    } else if (anchoredVwapRef.current) {
+      anchoredVwapRef.current.setData([]);
+    }
     if (showBollinger && bbUpperRef.current && bbMiddleRef.current && bbLowerRef.current) {
       const bb = calculateBollingerBands(candles, 20, 2);
       bbUpperRef.current.setData(bb.map((p) => ({ time: p.time as Time, value: p.upper })));
@@ -717,6 +753,7 @@ export default function CandlestickChart({
     ema20Ref.current?.applyOptions({ visible: showEMA20 });
     ema50Ref.current?.applyOptions({ visible: showEMA50 });
     vwapRef.current?.applyOptions({ visible: showVWAP });
+    anchoredVwapRef.current?.applyOptions({ visible: anchoredVwapTime != null });
     bbUpperRef.current?.applyOptions({ visible: showBollinger });
     bbMiddleRef.current?.applyOptions({ visible: showBollinger });
     bbLowerRef.current?.applyOptions({ visible: showBollinger });

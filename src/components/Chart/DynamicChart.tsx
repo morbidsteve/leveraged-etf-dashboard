@@ -34,6 +34,9 @@ interface DynamicChartProps {
   showPatterns?: boolean;
   onStopDrag?: (tradeId: string, newPrice: number) => void;
   showSessionBands?: boolean;
+  anchoredVwapTime?: number | null;
+  pickingAnchor?: boolean;
+  onPickAnchor?: (time: number) => void;
 }
 
 export default function DynamicChart(props: DynamicChartProps) {

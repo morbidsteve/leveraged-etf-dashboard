@@ -111,6 +111,8 @@ export default function CommandCenterPage() {
   const refreshInterval = storeHydrated ? settings.refreshInterval : 1000;
   const indicators = storeHydrated ? settings.indicators ?? {} : {};
   const extendedHours = storeHydrated ? settings.guardrails?.extendedHours ?? false : false;
+  const [anchoredVwapTime, setAnchoredVwapTime] = useState<number | null>(null);
+  const [pickingAnchor, setPickingAnchor] = useState(false);
   const toggleIndicator = (key: 'ema20' | 'ema50' | 'vwap' | 'bollinger') =>
     updateSettings({
       indicators: { ...(settings.indicators ?? {}), [key]: !(settings.indicators?.[key] ?? false) },
@@ -593,6 +595,38 @@ export default function CommandCenterPage() {
                     VWAP
                   </button>
                   <button
+                    onClick={() => {
+                      if (anchoredVwapTime != null) {
+                        // Already set: clear it
+                        setAnchoredVwapTime(null);
+                        setPickingAnchor(false);
+                      } else {
+                        setPickingAnchor((p) => !p);
+                      }
+                    }}
+                    className={`chip ${anchoredVwapTime != null || pickingAnchor ? 'active' : ''}`}
+                    style={
+                      anchoredVwapTime != null
+                        ? { color: '#f59e0b' }
+                        : pickingAnchor
+                        ? { color: '#fbbf24' }
+                        : undefined
+                    }
+                    title={
+                      anchoredVwapTime != null
+                        ? 'Anchored VWAP active — click to clear'
+                        : pickingAnchor
+                        ? 'Click any bar on the chart to anchor'
+                        : 'Anchor VWAP from a chosen bar'
+                    }
+                  >
+                    {anchoredVwapTime != null
+                      ? '◇ aVWAP'
+                      : pickingAnchor
+                      ? 'Click bar…'
+                      : 'aVWAP'}
+                  </button>
+                  <button
                     onClick={() => toggleIndicator('bollinger')}
                     className={`chip ${indicators.bollinger ? 'active' : ''}`}
                   >
@@ -620,6 +654,12 @@ export default function CommandCenterPage() {
                     showBollinger={indicators.bollinger}
                     showPatterns={indicators.patterns ?? false}
                     showSessionBands={extendedHours}
+                    anchoredVwapTime={anchoredVwapTime}
+                    pickingAnchor={pickingAnchor}
+                    onPickAnchor={(t) => {
+                      setAnchoredVwapTime(t);
+                      setPickingAnchor(false);
+                    }}
                     stopLines={trades
                       .filter((t) => t.status === 'open' && t.ticker === selectedTicker && t.stopPrice && t.stopPrice > 0)
                       .map((t) => ({ ticker: t.ticker, price: t.stopPrice!, tradeId: t.id }))}
