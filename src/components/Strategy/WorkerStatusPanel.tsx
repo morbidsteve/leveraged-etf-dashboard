@@ -51,17 +51,28 @@ export default function WorkerStatusPanel() {
 
   const sync = async () => {
     try {
+      // Forward the master kill-switch with the sync so the worker
+      // honors it even when the browser tab is closed.
+      const killSwitch =
+        (
+          (typeof window !== 'undefined'
+            ? (window as unknown as { __killSwitchHint?: boolean }).__killSwitchHint
+            : undefined) ?? undefined
+        );
       const r = await fetch('/api/worker/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ strategies }),
+        body: JSON.stringify({ strategies, killSwitch }),
       });
       const j = await r.json();
       if (j.error) {
         showToast(j.error, 'error', 5000);
         return;
       }
-      showToast(`Synced ${j.count} strategies to server worker`);
+      const serverChannel = strategies.filter((s) => s.executionChannel === 'server').length;
+      showToast(
+        `Synced ${j.count} strategies (${serverChannel} server-channel) to worker`
+      );
       refresh();
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Sync failed', 'error');

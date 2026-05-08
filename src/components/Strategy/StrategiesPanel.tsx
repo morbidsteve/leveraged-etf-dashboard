@@ -506,6 +506,32 @@ function StrategyDetail({
         </div>
       </Field>
 
+      <Field label="Execution channel">
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+            <input
+              type="radio"
+              checked={(strategy.executionChannel ?? 'browser') === 'browser'}
+              onChange={() => onUpdate({ executionChannel: 'browser' })}
+            />
+            <span className="text-white">Browser tab</span>
+          </label>
+          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+            <input
+              type="radio"
+              checked={strategy.executionChannel === 'server'}
+              onChange={() => onUpdate({ executionChannel: 'server' })}
+            />
+            <span className="text-white">Server worker</span>
+          </label>
+          <span className="text-[9px] text-gray-600 uppercase tracking-widest ml-auto">
+            {strategy.executionChannel === 'server'
+              ? 'Runs even when laptop is closed (requires SERVER_WORKER_ENABLED=1)'
+              : 'Stops when this tab closes'}
+          </span>
+        </div>
+      </Field>
+
       <div className="flex items-center justify-end -mb-1">
         <button
           onClick={() => setShowTreeView((v) => !v)}

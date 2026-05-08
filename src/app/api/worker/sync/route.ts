@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  let body: { strategies?: Strategy[] };
+  let body: { strategies?: Strategy[]; killSwitch?: boolean };
   try {
     body = await request.json();
   } catch {
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   try {
     const { startWorker, syncStrategies } = await import('@/lib/worker/strategyWorker');
     await startWorker();
-    await syncStrategies(body.strategies);
+    await syncStrategies(body.strategies, body.killSwitch);
     return NextResponse.json({ ok: true, count: body.strategies.length });
   } catch (e) {
     return NextResponse.json(

@@ -93,6 +93,11 @@ export function useStrategyEngine(opts: {
     const newEvents: Omit<StrategyEvent, 'id'>[] = [];
 
     for (const strategy of enabled) {
+      // Skip strategies that opted into server-side execution. The
+      // worker process owns those — running them here too would
+      // double-fire orders.
+      if (strategy.executionChannel === 'server') continue;
+
       // Per-strategy session gate. Default = ['open'] (regular hours
       // only). When the current market session isn't in the allow list,
       // we skip evaluation entirely — engine still runs but emits no

@@ -41,6 +41,9 @@ interface WorkerState {
   runtimes: Record<string, StrategyRuntime>;
   /** Last 200 events for surfacing in the UI. */
   recentEvents: Array<{ ts: string; type: string; detail: string }>;
+  /** Master kill switch synced from the browser settings store. When
+   *  true, the worker keeps evaluating but blocks all order dispatch. */
+  killSwitch?: boolean;
 }
 
 let state: WorkerState | null = null;
@@ -212,9 +215,26 @@ async function runOneTick() {
     })
   );
 
-  // Tick each (strategy, ticker)
+  // Session gate — same logic the browser engine uses
+  const session = getMarketSession();
+  if (session === 'closed') {
+    // Markets closed; nothing to do this tick. We still saveState
+    // so the heartbeat ticks even when idle.
+    await saveState();
+    return;
+  }
+
+  // Tick each (strategy, ticker). The worker only processes strategies
+  // explicitly opted into server-side execution. Browser-channel ones
+  // belong to whichever browser tab the user has open.
   for (const s of state.strategies) {
     if (!s.enabled) continue;
+    if (s.executionChannel !== 'server') continue;
+
+    // Per-strategy session allow-list (same default as browser engine)
+    const allowed = s.sessions ?? ['open'];
+    if (!allowed.includes(session)) continue;
+
     const rsiPeriod = s.rsiConfig?.period ?? DEFAULT_RSI_CONFIG.period;
     for (const t of s.tickers) {
       const candles = candleByTicker.get(t);
@@ -236,18 +256,138 @@ async function runOneTick() {
         await logEvent(ev.type, `${s.name}/${t}: ${ev.detail}`);
       }
       for (const action of out.actions) {
-        await logEvent(
-          'action',
-          `${s.name}/${t}: ${action.kind.toUpperCase()} ${action.shares} @ ${curr.price.toFixed(2)} — ${action.reason}`
-        );
-        // NOTE: deliberately not dispatching to broker here. The worker is
-        // a "shadow run" surface in Sprint 13; live execution stays with
-        // the browser engine until the OCO + reconciliation work lands.
+        const summary = `${s.name}/${t}: ${action.kind.toUpperCase()} ${action.shares} @ ${curr.price.toFixed(2)} — ${action.reason}`;
+        await logEvent('action', summary);
+
+        // Mode-aware dispatch:
+        //   paper          → log only (no fills tracked here yet)
+        //   manual_confirm → log only (no notification surface for the
+        //                    server worker — paired browser tab still
+        //                    handles confirms via /api/worker/status poll)
+        //   auto           → dispatch via the same Schwab order route
+        //                    used by the browser engine.
+        if (s.mode === 'auto') {
+          if (state.killSwitch) {
+            await logEvent('blocked', `Kill switch ON — ${s.name}/${t} order suppressed`);
+            continue;
+          }
+          try {
+            const result = await dispatchServerOrder(action, curr.price, s.mode);
+            await logEvent(
+              'fill',
+              `Schwab accepted: orderId ${result.orderId ?? 'n/a'} @ ${result.submittedPrice?.toFixed(2) ?? '—'} (session ${result.session ?? 'n/a'})`
+            );
+          } catch (e) {
+            await logEvent(
+              'error',
+              `Schwab dispatch failed: ${e instanceof Error ? e.message : String(e)}`
+            );
+            state!.errors += 1;
+          }
+        }
       }
     }
   }
 
   await saveState();
+}
+
+/**
+ * Dispatch an action through the Schwab order route. The worker can't
+ * use the browser-side dispatchAutoOrder helper (which assumes /api
+ * is reachable via fetch) because we may be running in the same Node
+ * process. We invoke the place-order route's underlying logic directly
+ * by importing the lib fns it uses — same guardrails apply because the
+ * lib fns are server-side too.
+ */
+async function dispatchServerOrder(
+  action: import('@/types/strategy').Action,
+  livePrice: number,
+  _mode: 'paper' | 'manual_confirm' | 'auto'
+): Promise<{ orderId: string | null; submittedPrice: number; session: string | null }> {
+  const { buildBuyLimitOrder, buildSellLimitOrder, placeOrder } = await import('@/lib/schwab/client');
+  const { getActiveAccountHash } = await import('@/lib/schwab/account');
+  const { checkGuardrails, recordAudit } = await import('@/lib/schwab/orderGuardrails');
+  const { schwabOrderSession } = await import('@/lib/marketHours');
+
+  const session = getMarketSession();
+  const orderSession = schwabOrderSession(session);
+  if (!orderSession) throw new Error('markets closed');
+
+  const buffer = 0.002; // 0.2% marketable buffer
+  let submittedPrice: number;
+  let order: ReturnType<typeof buildBuyLimitOrder>;
+  if (action.kind === 'enter') {
+    submittedPrice = roundToCents(livePrice * (1 + buffer));
+    order = buildBuyLimitOrder({
+      symbol: action.ticker,
+      shares: action.shares,
+      limitPrice: submittedPrice,
+      duration: 'DAY',
+      session: orderSession,
+    });
+  } else if (action.orderType === 'resting_limit' && action.limitPrice != null) {
+    submittedPrice = roundToCents(action.limitPrice);
+    order = buildSellLimitOrder({
+      symbol: action.ticker,
+      shares: action.shares,
+      limitPrice: submittedPrice,
+      duration: 'GOOD_TILL_CANCEL',
+      session: orderSession,
+    });
+  } else {
+    submittedPrice = roundToCents(livePrice * (1 - buffer));
+    order = buildSellLimitOrder({
+      symbol: action.ticker,
+      shares: action.shares,
+      limitPrice: submittedPrice,
+      duration: 'DAY',
+      session: orderSession,
+    });
+  }
+
+  const guard = await checkGuardrails({
+    symbol: action.ticker,
+    shares: action.shares,
+    estimatedPrice: submittedPrice,
+  });
+  if (!guard.allow) {
+    await recordAudit({
+      outcome: 'rejected',
+      symbol: action.ticker,
+      shares: action.shares,
+      estimatedPrice: submittedPrice,
+      reason: `worker:${guard.reason}`,
+    });
+    throw new Error(`server guardrail rejected: ${guard.reason}`);
+  }
+
+  const hash = await getActiveAccountHash();
+  let orderId: string | null = null;
+  try {
+    orderId = await placeOrder(hash, order);
+    await recordAudit({
+      outcome: 'submitted',
+      symbol: action.ticker,
+      shares: action.shares,
+      estimatedPrice: submittedPrice,
+      orderId: orderId ?? undefined,
+    });
+  } catch (e) {
+    await recordAudit({
+      outcome: 'failed',
+      symbol: action.ticker,
+      shares: action.shares,
+      estimatedPrice: submittedPrice,
+      reason: e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200),
+    });
+    throw e;
+  }
+  return { orderId, submittedPrice, session: orderSession };
+}
+
+function roundToCents(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 function chooseInterval(): number {
@@ -298,9 +438,10 @@ export async function getWorkerStatus(): Promise<WorkerState | null> {
 }
 
 /** Replace the worker's strategy set (called by /api/worker/sync from the browser). */
-export async function syncStrategies(strategies: Strategy[]): Promise<void> {
+export async function syncStrategies(strategies: Strategy[], killSwitch?: boolean): Promise<void> {
   if (!state) state = await loadState();
   state.strategies = strategies;
+  if (killSwitch !== undefined) state.killSwitch = killSwitch;
   // Drop runtimes for strategies that no longer exist
   const validKeys = new Set<string>();
   for (const s of strategies) {
@@ -310,5 +451,9 @@ export async function syncStrategies(strategies: Strategy[]): Promise<void> {
     if (!validKeys.has(k)) delete state.runtimes[k];
   }
   await saveState();
-  await logEvent('info', `Synced ${strategies.length} strategies (${validKeys.size} runtimes)`);
+  const serverChannel = strategies.filter((s) => s.executionChannel === 'server').length;
+  await logEvent(
+    'info',
+    `Synced ${strategies.length} strategies (${validKeys.size} runtimes, ${serverChannel} server-channel${killSwitch ? ', killSwitch ON' : ''})`
+  );
 }

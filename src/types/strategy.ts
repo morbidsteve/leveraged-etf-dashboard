@@ -123,6 +123,18 @@ export interface Strategy {
    * The engine + Schwab order session both gate on this.
    */
   sessions?: Array<'pre' | 'open' | 'post'>;
+  /**
+   * Where this strategy executes:
+   *   'browser' (default) — the browser-tab engine evaluates and dispatches.
+   *                          Stops running when the tab closes.
+   *   'server'            — the server-resident worker evaluates and dispatches.
+   *                          Survives tab close / laptop sleep.
+   *
+   * Important: only ONE channel runs each strategy at a time. The browser
+   * engine skips server-channel strategies, the worker skips browser-channel
+   * strategies, so there's no risk of duplicate orders.
+   */
+  executionChannel?: 'browser' | 'server';
   createdAt: Date;
   updatedAt: Date;
 }
