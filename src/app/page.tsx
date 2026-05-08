@@ -5,7 +5,7 @@ import { MainLayout, Drawer, BottomTabBar } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel, InsiderActivityCard, RegimeChip, HealthBadge, CorrelationCard, EconCalendarBanner, DailySummaryCard, VolatilityCard } from '@/components/Dashboard';
+import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel, InsiderActivityCard, RegimeChip, HealthBadge, CorrelationCard, EconCalendarBanner, DailySummaryCard, VolatilityCard, WatchlistHeatmap } from '@/components/Dashboard';
 import { TimeAndSales } from '@/components/Tape';
 import VoiceCommandButton from '@/components/VoiceCommandButton';
 import ATRStopSuggestion from '@/components/Position/ATRStopSuggestion';
@@ -777,6 +777,7 @@ export default function CommandCenterPage() {
               onActionPosition={(tradeId) => setPositionTarget({ kind: 'manual', tradeId })}
             />
           </div>
+          <WatchlistHeatmap onSelectTicker={setSelectedTicker} />
           <CorrelationCard />
           <DailySummaryCard />
           <VolatilityCard />

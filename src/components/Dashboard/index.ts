@@ -16,3 +16,4 @@ export { default as CorrelationCard } from './CorrelationCard';
 export { default as EconCalendarBanner } from './EconCalendarBanner';
 export { default as DailySummaryCard } from './DailySummaryCard';
 export { default as VolatilityCard } from './VolatilityCard';
+export { default as WatchlistHeatmap } from './WatchlistHeatmap';
