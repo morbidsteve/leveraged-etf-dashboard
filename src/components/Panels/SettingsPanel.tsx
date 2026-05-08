@@ -10,6 +10,7 @@ import { Tabs, TabPanel, TabDef } from '@/components/UI';
 import WatchlistManager from './WatchlistManager';
 import TaxToolsCard from './TaxToolsCard';
 import ApiKeysCard from './ApiKeysCard';
+import WebhooksCard from './WebhooksCard';
 
 type SettingsTab = 'broker' | 'risk' | 'strategy' | 'watchlists' | 'scanner' | 'data' | 'help';
 
@@ -149,6 +150,7 @@ export default function SettingsPanel() {
           <SchwabConnectCard />
           <WorkerStatusPanel />
           <ApiKeysCard />
+          <WebhooksCard />
         </div>
       </TabPanel>
 
