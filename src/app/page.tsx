@@ -7,6 +7,7 @@ import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
 import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel, InsiderActivityCard, RegimeChip, HealthBadge, CorrelationCard, EconCalendarBanner, DailySummaryCard, VolatilityCard } from '@/components/Dashboard';
 import { TimeAndSales } from '@/components/Tape';
+import VoiceCommandButton from '@/components/VoiceCommandButton';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -454,6 +455,7 @@ export default function CommandCenterPage() {
             </span>
             <LayoutSwitcher />
             <HealthBadge />
+            <VoiceCommandButton onSelectTicker={setSelectedTicker} />
           </div>
         </div>
         <SignalRadar
