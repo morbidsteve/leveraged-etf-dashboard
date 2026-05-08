@@ -15,3 +15,4 @@ export { default as HealthBadge } from './HealthBadge';
 export { default as CorrelationCard } from './CorrelationCard';
 export { default as EconCalendarBanner } from './EconCalendarBanner';
 export { default as DailySummaryCard } from './DailySummaryCard';
+export { default as VolatilityCard } from './VolatilityCard';
