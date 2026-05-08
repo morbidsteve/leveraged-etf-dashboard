@@ -8,6 +8,7 @@ import {
   OrderTicket,
   StrategyBuilder,
   PositionList,
+  GreeksDashboard,
 } from '@/components/Options';
 import {
   OptionChain,
@@ -113,7 +114,10 @@ export default function OptionsPanel() {
       </TabPanel>
 
       <TabPanel id="positions" active={activeTab}>
-        <PositionList />
+        <div className="space-y-4">
+          <GreeksDashboard />
+          <PositionList />
+        </div>
       </TabPanel>
 
       <TabPanel id="strategies" active={activeTab}>

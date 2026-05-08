@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useOptionsStore } from '@/store';
+import { useOptionsStore, usePriceStore } from '@/store';
 import { OptionPosition, OptionContract } from '@/types/options';
 import { format } from 'date-fns';
 import { formatCurrency } from '@/lib/calculations';
 import { showToast } from '@/components/UI';
+import PnLCurveChart from './PnLCurveChart';
 
 /**
  * List of open + closed options positions. Each open row shows:
@@ -94,6 +95,7 @@ function OpenRow({
 }) {
   const [currentValue, setCurrentValue] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const livePrice = usePriceStore((s) => s.prices[position.underlying]?.price);
 
   // Find soonest expiration across legs (for "days to live")
   const soonestDte = Math.min(
@@ -226,6 +228,17 @@ function OpenRow({
           </div>
         )}
       </div>
+
+      {/* P&L curve at expiration */}
+      {livePrice && (
+        <div className="pt-2">
+          <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">
+            P&L at expiration
+          </div>
+          <PnLCurveChart position={position} underlyingPrice={livePrice} />
+        </div>
+      )}
+
       <div className="flex items-center gap-2 pt-2 border-t border-white/5">
         <button
           onClick={refresh}
