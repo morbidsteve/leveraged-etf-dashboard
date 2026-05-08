@@ -76,6 +76,17 @@ export default function BacktestPanel() {
     warnings: string[];
   } | null>(null);
   const [walkForwardRunning, setWalkForwardRunning] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizerResult, setOptimizerResult] = useState<{
+    cells: Array<{ period: number; oversold: number; overbought: number; trades: number; winRate: number; pnl: number; expectancy: number; sharpe: number; score: number }>;
+    best: { period: number; oversold: number; overbought: number; trades: number; winRate: number; pnl: number; expectancy: number; sharpe: number; score: number } | null;
+    baseline: { period: number; oversold: number; overbought: number; trades: number; winRate: number; pnl: number; expectancy: number; sharpe: number; score: number } | null;
+    scoreStd: number;
+    scoreMean: number;
+    topDecileMean: number;
+    robustness: 'robust' | 'modest' | 'fragile' | 'overfit';
+    durationMs: number;
+  } | null>(null);
 
   const selected = useMemo(
     () => strategies.find((s) => s.id === selectedId) ?? null,
@@ -243,6 +254,37 @@ export default function BacktestPanel() {
           >
             {walkForwardRunning ? 'Validating…' : 'Walk-forward'}
           </button>
+          <button
+            onClick={async () => {
+              if (!selected) return;
+              setOptimizing(true);
+              setOptimizerResult(null);
+              try {
+                const r = await fetch('/api/optimize', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    strategy: selected,
+                    ticker: tickerOverride.trim().toUpperCase() || selected.tickers[0],
+                    interval: preset.interval,
+                    range: preset.range,
+                  }),
+                });
+                const data = await r.json();
+                if (data.error) throw new Error(data.error);
+                setOptimizerResult(data);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : 'Optimize failed');
+              } finally {
+                setOptimizing(false);
+              }
+            }}
+            disabled={optimizing || !selected}
+            className="btn btn-outline text-sm"
+            title="Grid-search RSI period / oversold / overbought combinations"
+          >
+            {optimizing ? 'Searching…' : 'Optimize params'}
+          </button>
         </div>
       </div>
 
@@ -253,6 +295,104 @@ export default function BacktestPanel() {
       )}
 
       {result && <BacktestResultView result={result} />}
+
+      {optimizerResult && (
+        <div className="card">
+          <div className="card-header flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="font-medium text-white">Parameter optimization</h3>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Grid-searched {optimizerResult.cells.length} RSI period / oversold / overbought
+                combos in {(optimizerResult.durationMs / 1000).toFixed(1)}s. Robustness label
+                tells you whether the winning combo is real or curve-fit.
+              </p>
+            </div>
+            <span
+              className={`text-[10px] uppercase tracking-widest font-mono px-2 py-1 rounded border ${
+                optimizerResult.robustness === 'robust'
+                  ? 'bg-profit/10 border-profit/40 text-profit'
+                  : optimizerResult.robustness === 'modest'
+                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                  : optimizerResult.robustness === 'fragile'
+                  ? 'bg-amber-500/15 border-amber-500/50 text-amber-400'
+                  : 'bg-loss/10 border-loss/40 text-loss'
+              }`}
+            >
+              {optimizerResult.robustness}
+            </span>
+          </div>
+          <div className="card-body space-y-3 text-xs">
+            {optimizerResult.best && (
+              <div className="rounded-lg border border-profit/30 bg-profit/5 p-2.5 space-y-1">
+                <div className="text-[10px] uppercase tracking-widest text-gray-500">
+                  Best combo
+                </div>
+                <div className="font-mono text-white">
+                  RSI({optimizerResult.best.period}) · oversold ≤{optimizerResult.best.oversold} · overbought ≥{optimizerResult.best.overbought}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
+                  <span className="font-mono text-[11px] text-gray-300">
+                    P&amp;L:{' '}
+                    <span className={optimizerResult.best.pnl >= 0 ? 'text-profit' : 'text-loss'}>
+                      ${optimizerResult.best.pnl.toFixed(2)}
+                    </span>
+                  </span>
+                  <span className="font-mono text-[11px] text-gray-300">
+                    Win: {optimizerResult.best.winRate.toFixed(0)}%
+                  </span>
+                  <span className="font-mono text-[11px] text-gray-300">
+                    Trades: {optimizerResult.best.trades}
+                  </span>
+                  <span className="font-mono text-[11px] text-gray-300">
+                    Sharpe: {optimizerResult.best.sharpe.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+            {optimizerResult.baseline && optimizerResult.best && (
+              <div className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5">
+                <div className="text-[10px] uppercase tracking-widest text-gray-500">
+                  vs current params
+                </div>
+                <div className="font-mono text-[11px] text-gray-300 mt-0.5">
+                  RSI({optimizerResult.baseline.period}) · {optimizerResult.baseline.oversold}/{optimizerResult.baseline.overbought}: P&amp;L ${optimizerResult.baseline.pnl.toFixed(2)} · Win {optimizerResult.baseline.winRate.toFixed(0)}% · {optimizerResult.baseline.trades} trades
+                </div>
+                <div className="text-[11px] mt-1">
+                  Lift:{' '}
+                  <span
+                    className={
+                      optimizerResult.best.pnl > optimizerResult.baseline.pnl
+                        ? 'text-profit font-mono'
+                        : 'text-loss font-mono'
+                    }
+                  >
+                    ${(optimizerResult.best.pnl - optimizerResult.baseline.pnl).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <Stat label="Mean score" value={optimizerResult.scoreMean.toFixed(2)} />
+              <Stat
+                label="Top-decile mean"
+                value={optimizerResult.topDecileMean.toFixed(2)}
+                tone="profit"
+              />
+              <Stat label="Std dev" value={optimizerResult.scoreStd.toFixed(2)} />
+            </div>
+            <div className="text-[10px] text-gray-600 italic">
+              {optimizerResult.robustness === 'robust' &&
+                'Profitable across a wide neighborhood — the winning combo is likely real.'}
+              {optimizerResult.robustness === 'modest' &&
+                'Modest sensitivity — re-test on out-of-sample data before swapping params.'}
+              {optimizerResult.robustness === 'fragile' &&
+                'High score variance — winning combo may be curve-fit. Walk-forward first.'}
+              {optimizerResult.robustness === 'overfit' &&
+                'Top combo wildly outperforms the average. Almost certainly overfit; do not use.'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {walkForward && (
         <div className="card">
@@ -859,5 +999,24 @@ function PartialEquityCurve({
       <line x1={cursorX} x2={cursorX} y1={0} y2={h} stroke="rgba(167, 139, 250, 0.6)" strokeWidth="1" />
       <circle cx={cursorX} cy={ys[cursor]} r="3.5" fill="#a78bfa" />
     </svg>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: 'profit' | 'loss' | 'neutral';
+}) {
+  const cls =
+    tone === 'profit' ? 'text-profit' : tone === 'loss' ? 'text-loss' : 'text-white';
+  return (
+    <div className="rounded-lg bg-white/[0.02] border border-white/5 p-2">
+      <div className="text-[9px] uppercase tracking-widest text-gray-500">{label}</div>
+      <div className={`text-sm font-mono font-semibold ${cls}`}>{value}</div>
+    </div>
   );
 }
