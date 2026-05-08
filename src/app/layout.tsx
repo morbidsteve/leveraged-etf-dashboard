@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import PerfOverlay from '@/components/PerfOverlay';
+import HotkeyHelpOverlay from '@/components/HotkeyHelpOverlay';
 
 export const metadata: Metadata = {
   title: 'Leveraged ETF Command Center',
@@ -43,6 +44,7 @@ export default function RootLayout({
       <body className="bg-ink text-white antialiased">
         <ErrorBoundary>{children}</ErrorBoundary>
         <PerfOverlay />
+        <HotkeyHelpOverlay />
       </body>
     </html>
   );
