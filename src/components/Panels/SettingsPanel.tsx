@@ -9,6 +9,7 @@ import { downloadBundle, applyBundle } from '@/lib/exportImport';
 import { Tabs, TabPanel, TabDef } from '@/components/UI';
 import WatchlistManager from './WatchlistManager';
 import TaxToolsCard from './TaxToolsCard';
+import ApiKeysCard from './ApiKeysCard';
 
 type SettingsTab = 'broker' | 'risk' | 'strategy' | 'watchlists' | 'scanner' | 'data' | 'help';
 
@@ -147,6 +148,7 @@ export default function SettingsPanel() {
         <div className="space-y-4">
           <SchwabConnectCard />
           <WorkerStatusPanel />
+          <ApiKeysCard />
         </div>
       </TabPanel>
 
