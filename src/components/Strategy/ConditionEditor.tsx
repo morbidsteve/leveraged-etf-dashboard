@@ -447,6 +447,14 @@ function defaultValueRef(kind: ValueRef['kind']): ValueRef {
     case 'minutes_since_entry': return { kind: 'minutes_since_entry' };
     case 'pct_of':
       return { kind: 'pct_of', base: { kind: 'entry_price' }, pct: 1.5 };
+    case 'iv':
+      return { kind: 'iv', period: 'live' };
+    case 'delta':
+      return { kind: 'delta', daysToExpiry: 7, type: 'put' };
+    case 'days_to_expiry':
+      return { kind: 'days_to_expiry' };
+    case 'position_pnl_pct':
+      return { kind: 'position_pnl_pct' };
   }
 }
 

@@ -20,7 +20,19 @@ export type ValueRef =
   | { kind: 'minutes_since_open' }            // 0 at 9:30 ET
   | { kind: 'entry_price' }                   // valid only in EXIT/STOP context
   | { kind: 'minutes_since_entry' }           // valid only in EXIT/STOP context
-  | { kind: 'pct_of'; base: ValueRef; pct: number }; // base × (1 + pct/100)
+  | { kind: 'pct_of'; base: ValueRef; pct: number }  // base × (1 + pct/100)
+  // ── Options-aware values (Sprint O7) ─────────────────────────────────
+  /** ATM IV at the front-month expiration of the strategy's underlying.
+   * `period` selects 'live' (current) or 'percentile_252' (rolling rank). */
+  | { kind: 'iv'; period: 'live' | 'percentile_252' }
+  /** Resolved-contract delta. Used to gate on "is there a contract at
+   * this delta available?" rarely; mostly informational. */
+  | { kind: 'delta'; daysToExpiry: number; type: 'call' | 'put' }
+  /** Days until soonest leg in current options position. valid in EXIT context. */
+  | { kind: 'days_to_expiry' }
+  /** Position-relative P&L percent for the active options position.
+   * Computed as realized + unrealized over net cost. valid in EXIT context. */
+  | { kind: 'position_pnl_pct' };
 
 // ── Conditions — boolean-valued expressions on the data context ────────
 
@@ -175,6 +187,19 @@ export interface DataContext {
   // Position-relative values (set when in_position)
   entryPrice?: number;
   entryAt?: Date;
+  // ── Options-aware extensions (Sprint O7) ───────────────────────────────
+  /** Front-month ATM IV (decimal). Populated when the strategy is
+   * options-aware and an OptionChain has been fetched for the ticker. */
+  ivLive?: number;
+  /** IV percentile (0-100, rolling 252-day). Null until enough history. */
+  ivPercentile?: number | null;
+  /** Resolved deltas at common DTEs, keyed as `${dte}:${type}` → delta.
+   * Used by 'delta' value-refs without re-walking the chain. */
+  deltas?: Record<string, number>;
+  /** Days to expiry of the soonest leg in the current options position. */
+  optionDaysToExpiry?: number;
+  /** % P&L on the open options position (unrealized + realized over cost). */
+  optionPositionPnlPct?: number;
 }
 
 // ── Strategy event log entry ────────────────────────────────────────────

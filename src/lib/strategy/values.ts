@@ -45,6 +45,20 @@ export function evaluateValue(ref: ValueRef, ctx: DataContext): number | null {
       if (base === null) return null;
       return base * (1 + ref.pct / 100);
     }
+    // ── Options-aware refs (Sprint O7) ────────────────────────────────
+    case 'iv': {
+      if (ref.period === 'live') return ctx.ivLive ?? null;
+      return ctx.ivPercentile ?? null;
+    }
+    case 'delta': {
+      const key = `${ref.daysToExpiry}:${ref.type}`;
+      const v = ctx.deltas?.[key];
+      return v == null ? null : v;
+    }
+    case 'days_to_expiry':
+      return ctx.optionDaysToExpiry ?? null;
+    case 'position_pnl_pct':
+      return ctx.optionPositionPnlPct ?? null;
   }
 }
 
@@ -94,6 +108,14 @@ export function describeValue(ref: ValueRef): string {
       return 'minutes_since_entry';
     case 'pct_of':
       return `${describeValue(ref.base)} × ${(1 + ref.pct / 100).toFixed(4)}`;
+    case 'iv':
+      return ref.period === 'live' ? 'iv(live)' : 'iv(pctile_252)';
+    case 'delta':
+      return `delta(${ref.daysToExpiry}d, ${ref.type})`;
+    case 'days_to_expiry':
+      return 'days_to_expiry';
+    case 'position_pnl_pct':
+      return 'position_pnl_pct';
   }
 }
 
@@ -119,7 +141,16 @@ export function collectTimeframes(ref: ValueRef): Timeframe[] {
       case 'pct_of':
         walk(r.base);
         break;
-      default:
+      // Options-aware refs are timeframe-agnostic (they belong to the
+      // chain's per-expiration data, not the underlying's bar data).
+      case 'literal':
+      case 'minutes_since_open':
+      case 'entry_price':
+      case 'minutes_since_entry':
+      case 'iv':
+      case 'delta':
+      case 'days_to_expiry':
+      case 'position_pnl_pct':
         break;
     }
   }
