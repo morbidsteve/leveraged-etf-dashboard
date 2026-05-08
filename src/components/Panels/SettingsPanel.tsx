@@ -91,14 +91,35 @@ export default function SettingsPanel() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('broker');
+  // Persist last-selected settings tab across visits via localStorage.
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+    if (typeof window === 'undefined') return 'broker';
+    const stored = window.localStorage.getItem('etf-settings-active-tab');
+    if (
+      stored === 'broker' ||
+      stored === 'risk' ||
+      stored === 'strategy' ||
+      stored === 'watchlists' ||
+      stored === 'scanner' ||
+      stored === 'data' ||
+      stored === 'help'
+    ) {
+      return stored;
+    }
+    return 'broker';
+  });
 
   return (
     <div className="space-y-4">
       <Tabs<SettingsTab>
         tabs={SETTINGS_TABS}
         active={activeTab}
-        onChange={setActiveTab}
+        onChange={(t) => {
+          setActiveTab(t);
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('etf-settings-active-tab', t);
+          }
+        }}
         variant="underline"
       />
 

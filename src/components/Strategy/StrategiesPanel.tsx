@@ -14,7 +14,7 @@ import { formatCurrency, formatPrice } from '@/lib/calculations';
 import { format } from 'date-fns';
 import ConditionEditor, { blankCustomStrategy } from './ConditionEditor';
 import { buildShareUrl, consumeIncomingStrategy, shareableToAddInput } from '@/lib/strategy/share';
-import { EmptyState } from '@/components/UI';
+import { EmptyState, showToast } from '@/components/UI';
 import { runtimeKey } from '@/types/strategy';
 import StrategyWizard from './StrategyWizard';
 import ConditionLiveBadge from './ConditionLiveBadge';
@@ -65,9 +65,7 @@ export default function StrategiesPanel() {
     const url = buildShareUrl(s);
     try {
       await navigator.clipboard.writeText(url);
-      alert(
-        'Share link copied to clipboard.\n\nThe recipient gets a paper-mode, disabled clone — they can review the conditions before enabling.'
-      );
+      showToast('Share link copied to clipboard');
     } catch {
       window.prompt('Copy this share URL:', url);
     }
@@ -87,6 +85,7 @@ export default function StrategiesPanel() {
       cooldownMinutes: s.cooldownMinutes,
     });
     setExpandedId(cloned.id);
+    showToast(`Cloned "${s.name}" → "${cloned.name}" (paper, disabled)`);
   };
 
   const totalPaperPnL = useMemo(
@@ -173,8 +172,9 @@ export default function StrategiesPanel() {
         <>
           <StrategyWizard
             onCreate={(input) => {
-              addStrategy(input);
+              const created = addStrategy(input);
               setShowNew(false);
+              showToast(`Created "${created.name}" (paper, disabled)`);
             }}
             onCancel={() => setShowNew(false)}
           />
@@ -254,7 +254,10 @@ export default function StrategiesPanel() {
                     <div className="flex items-start gap-3 min-w-0">
                       <Toggle
                         on={s.enabled}
-                        onChange={(v) => updateStrategy(s.id, { enabled: v })}
+                        onChange={(v) => {
+                          updateStrategy(s.id, { enabled: v });
+                          showToast(`${v ? 'Enabled' : 'Disabled'} "${s.name}"`, v ? 'success' : 'info');
+                        }}
                       />
                       <div className="min-w-0">
                         <div className="font-medium text-white tracking-tight">{s.name}</div>

@@ -19,6 +19,7 @@ import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, us
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
 import CommandPalette from '@/components/CommandPalette';
 import ShortcutsHelp from '@/components/ShortcutsHelp';
+import { ToastHost } from '@/components/UI';
 import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel, StrategyMonitor } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
 import { useTradeStore, usePriceStore, useSettingsStore, useStrategyStore, usePaperStore } from '@/store';
@@ -693,6 +694,7 @@ export default function CommandCenterPage() {
       {/* COMMAND PALETTE — Cmd+K universal jump */}
       <CommandPalette />
       <ShortcutsHelp />
+      <ToastHost />
 
       {/* STRATEGY CONFIRM MODAL — manual_confirm strategies surface here */}
       <StrategyConfirmModal
