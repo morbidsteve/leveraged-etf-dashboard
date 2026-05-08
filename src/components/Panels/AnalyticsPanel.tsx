@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { QuickStats } from '@/components/Dashboard';
 import { useTradeStore, usePriceStore } from '@/store';
+import StrategyRollup from './StrategyRollup';
 import { useStoreHydration } from '@/hooks';
 import {
   calculatePortfolioSummary,
@@ -198,6 +199,8 @@ export default function AnalyticsPanel() {
 
   return (
     <div className="space-y-6">
+      <StrategyRollup />
+
       <QuickStats summary={portfolioSummary} />
 
       {openTrades.length > 0 && (
