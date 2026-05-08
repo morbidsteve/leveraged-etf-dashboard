@@ -704,6 +704,7 @@ export default function CommandCenterPage() {
               <ActionTile icon="backtest" label="Backtest" onClick={() => setDrawer('backtest')} />
               <ActionTile icon="journal" label="Journal" onClick={() => setDrawer('journal')} />
               <ActionTile icon="backtest" label="Replay" onClick={() => { window.location.href = '/replay'; }} />
+              <ActionTile icon="trades" label="Compare" onClick={() => { window.location.href = '/compare'; }} />
             </LaunchSection>
             <LaunchSection label="Analyze">
               <ActionTile icon="trades" label="Trades" onClick={() => setDrawer('trades')} />
