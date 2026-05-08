@@ -10,3 +10,4 @@ export { default as NewsStrip } from './NewsStrip';
 export { default as EarningsWidget } from './EarningsWidget';
 export { default as MultiSignalPanel } from './MultiSignalPanel';
 export { default as InsiderActivityCard } from './InsiderActivityCard';
+export { default as RegimeChip } from './RegimeChip';

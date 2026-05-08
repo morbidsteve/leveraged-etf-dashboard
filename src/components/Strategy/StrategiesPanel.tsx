@@ -21,6 +21,7 @@ import ConditionLiveBadge from './ConditionLiveBadge';
 import EntryFireStrip from './EntryFireStrip';
 import ConditionTreeView from './ConditionTreeView';
 import StrategyExplainerCard from './StrategyExplainerCard';
+import { scoreStrategy } from '@/lib/strategy/signalScoring';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
 
@@ -236,6 +237,7 @@ export default function StrategiesPanel() {
             const opensForStrat = paperOpen.filter((p) => p.strategyId === s.id);
             const closedForStrat = paperClosed.filter((t) => t.strategyId === s.id);
             const stratPnL = closedForStrat.reduce((sum, t) => sum + t.realizedPnL, 0);
+            const score = scoreStrategy(s, paperClosed);
             // Live unrealized P&L summed across all open positions
             const liveOpenPnL = opensForStrat.reduce((sum, p) => {
               const live = prices[p.ticker];
@@ -291,6 +293,21 @@ export default function StrategiesPanel() {
                       >
                         Share
                       </button>
+                      {score.trades > 0 && (
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                            score.score >= 60
+                              ? 'bg-profit/10 border-profit/30 text-profit'
+                              : score.score >= 40
+                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                              : 'bg-loss/10 border-loss/30 text-loss'
+                          }`}
+                          title={score.description}
+                        >
+                          {score.score.toFixed(0)}
+                          {!score.reliable && '*'}
+                        </span>
+                      )}
                       <button
                         onClick={() => setExpandedId(isExp ? null : s.id)}
                         className="text-[10px] uppercase tracking-wide text-gray-400 hover:text-white"

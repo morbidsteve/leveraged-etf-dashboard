@@ -5,7 +5,7 @@ import { MainLayout, Drawer, BottomTabBar } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel, InsiderActivityCard } from '@/components/Dashboard';
+import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel, InsiderActivityCard, RegimeChip } from '@/components/Dashboard';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -441,6 +441,7 @@ export default function CommandCenterPage() {
             Signal radar · all watchlist
           </h2>
           <div className="flex items-center gap-2">
+            <RegimeChip />
             <span className="text-[10px] text-gray-600 uppercase tracking-widest hidden sm:inline">
               BUY/SELL float to top
             </span>

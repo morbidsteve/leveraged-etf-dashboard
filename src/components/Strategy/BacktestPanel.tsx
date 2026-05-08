@@ -65,6 +65,17 @@ export default function BacktestPanel() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [walkForward, setWalkForward] = useState<{
+    windows: Array<{ index: number; inSample: { metrics: { winRate: number; expectancy: number; trades: number } }; outOfSample: { metrics: { winRate: number; expectancy: number; trades: number } } }>;
+    inSampleWinRateAvg: number;
+    oosWinRateAvg: number;
+    inSampleExpectancyAvg: number;
+    oosExpectancyAvg: number;
+    winRateDecayPct: number;
+    expectancyDecayPct: number;
+    warnings: string[];
+  } | null>(null);
+  const [walkForwardRunning, setWalkForwardRunning] = useState(false);
 
   const selected = useMemo(
     () => strategies.find((s) => s.id === selectedId) ?? null,
@@ -199,6 +210,39 @@ export default function BacktestPanel() {
           >
             {running ? 'Running...' : 'Run Backtest'}
           </button>
+          <button
+            onClick={async () => {
+              if (!selected) return;
+              setWalkForwardRunning(true);
+              setWalkForward(null);
+              try {
+                const r = await fetch('/api/backtest/walkforward', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    strategy: selected,
+                    ticker: tickerOverride.trim().toUpperCase() || selected.tickers[0],
+                    interval: preset.interval,
+                    range: preset.range,
+                    inSampleBars: 500,
+                    outOfSampleBars: 100,
+                  }),
+                });
+                const data = await r.json();
+                if (data.error) throw new Error(data.error);
+                setWalkForward(data);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : 'Walk-forward failed');
+              } finally {
+                setWalkForwardRunning(false);
+              }
+            }}
+            disabled={walkForwardRunning || !selected}
+            className="btn btn-outline text-sm"
+            title="Validate strategy out-of-sample using rolling windows"
+          >
+            {walkForwardRunning ? 'Validating…' : 'Walk-forward'}
+          </button>
         </div>
       </div>
 
@@ -209,6 +253,82 @@ export default function BacktestPanel() {
       )}
 
       {result && <BacktestResultView result={result} />}
+
+      {walkForward && (
+        <div className="card">
+          <div className="card-header">
+            <h3 className="font-medium text-white">Walk-forward validation</h3>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Rolling in-sample / out-of-sample windows. Decay = how much
+              performance drops out-of-sample. Negative decay is great
+              (OOS better than IS); positive &gt;30% suggests overfitting.
+            </p>
+          </div>
+          <div className="card-body space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div className="rounded bg-white/[0.03] border border-white/5 p-2">
+                <div className="text-[9px] uppercase tracking-widest text-gray-500">Win rate IS / OOS</div>
+                <div className="font-mono">
+                  {walkForward.inSampleWinRateAvg.toFixed(0)}% / <span className={walkForward.oosWinRateAvg < walkForward.inSampleWinRateAvg * 0.7 ? 'text-loss' : 'text-profit'}>{walkForward.oosWinRateAvg.toFixed(0)}%</span>
+                </div>
+              </div>
+              <div className="rounded bg-white/[0.03] border border-white/5 p-2">
+                <div className="text-[9px] uppercase tracking-widest text-gray-500">Expectancy IS / OOS</div>
+                <div className="font-mono text-[11px]">
+                  ${walkForward.inSampleExpectancyAvg.toFixed(2)} / <span className={walkForward.oosExpectancyAvg < 0 ? 'text-loss' : 'text-profit'}>${walkForward.oosExpectancyAvg.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="rounded bg-white/[0.03] border border-white/5 p-2">
+                <div className="text-[9px] uppercase tracking-widest text-gray-500">Win-rate decay</div>
+                <div className={`font-mono ${walkForward.winRateDecayPct > 30 ? 'text-loss' : 'text-white'}`}>
+                  {walkForward.winRateDecayPct.toFixed(1)}%
+                </div>
+              </div>
+              <div className="rounded bg-white/[0.03] border border-white/5 p-2">
+                <div className="text-[9px] uppercase tracking-widest text-gray-500">Windows</div>
+                <div className="font-mono">{walkForward.windows.length}</div>
+              </div>
+            </div>
+            {walkForward.warnings.length > 0 && (
+              <div className="rounded border border-amber-400/30 bg-amber-500/10 p-2 space-y-1">
+                {walkForward.warnings.map((w, i) => (
+                  <div key={i} className="text-[11px] text-amber-100">⚠ {w}</div>
+                ))}
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px] font-mono">
+                <thead>
+                  <tr className="text-left text-[9px] uppercase tracking-widest text-gray-500 border-b border-white/10">
+                    <th className="px-2 py-1 font-normal">Window</th>
+                    <th className="px-2 py-1 font-normal text-right">IS trades</th>
+                    <th className="px-2 py-1 font-normal text-right">IS win%</th>
+                    <th className="px-2 py-1 font-normal text-right">OOS trades</th>
+                    <th className="px-2 py-1 font-normal text-right">OOS win%</th>
+                    <th className="px-2 py-1 font-normal text-right">OOS exp.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {walkForward.windows.map((w) => (
+                    <tr key={w.index} className="border-b border-white/5">
+                      <td className="px-2 py-1">{w.index + 1}</td>
+                      <td className="px-2 py-1 text-right">{w.inSample.metrics.trades}</td>
+                      <td className="px-2 py-1 text-right">{w.inSample.metrics.winRate.toFixed(0)}%</td>
+                      <td className="px-2 py-1 text-right">{w.outOfSample.metrics.trades}</td>
+                      <td className={`px-2 py-1 text-right ${w.outOfSample.metrics.winRate < 50 ? 'text-loss' : 'text-profit'}`}>
+                        {w.outOfSample.metrics.winRate.toFixed(0)}%
+                      </td>
+                      <td className={`px-2 py-1 text-right ${w.outOfSample.metrics.expectancy >= 0 ? 'text-profit' : 'text-loss'}`}>
+                        ${w.outOfSample.metrics.expectancy.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
