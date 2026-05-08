@@ -698,6 +698,7 @@ export default function CommandCenterPage() {
               <ActionTile icon="monitor" label="Live monitor" onClick={() => setDrawer('monitor')} highlight />
               <ActionTile icon="backtest" label="Backtest" onClick={() => setDrawer('backtest')} />
               <ActionTile icon="journal" label="Journal" onClick={() => setDrawer('journal')} />
+              <ActionTile icon="backtest" label="Replay" onClick={() => { window.location.href = '/replay'; }} />
             </LaunchSection>
             <LaunchSection label="Analyze">
               <ActionTile icon="trades" label="Trades" onClick={() => setDrawer('trades')} />
