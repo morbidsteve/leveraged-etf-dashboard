@@ -45,6 +45,16 @@ export default function StrategiesPanel() {
     if (inc) setIncoming(inc);
   }, []);
 
+  // Cmd+K palette can dispatch this to deep-link into a specific strategy
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<string>;
+      if (typeof ev.detail === 'string') setExpandedId(ev.detail);
+    };
+    window.addEventListener('etf-expand-strategy', handler);
+    return () => window.removeEventListener('etf-expand-strategy', handler);
+  }, []);
+
   const handleAcceptIncoming = () => {
     if (!incoming) return;
     addStrategy(shareableToAddInput(incoming));

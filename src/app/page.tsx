@@ -17,6 +17,8 @@ import {
 } from '@/components/Panels';
 import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useAlertRuleEngine, useStrategyEngine } from '@/hooks';
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
+import CommandPalette from '@/components/CommandPalette';
+import ShortcutsHelp from '@/components/ShortcutsHelp';
 import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel, StrategyMonitor } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
 import { useTradeStore, usePriceStore, useSettingsStore, useStrategyStore, usePaperStore } from '@/store';
@@ -687,6 +689,10 @@ export default function CommandCenterPage() {
 
       {/* ALERT TOAST — surfaces live signals in the corner */}
       <AlertToast onOpenPanel={() => setDrawer('alerts')} />
+
+      {/* COMMAND PALETTE — Cmd+K universal jump */}
+      <CommandPalette />
+      <ShortcutsHelp />
 
       {/* STRATEGY CONFIRM MODAL — manual_confirm strategies surface here */}
       <StrategyConfirmModal
