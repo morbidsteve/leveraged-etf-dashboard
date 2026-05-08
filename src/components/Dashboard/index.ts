@@ -12,3 +12,4 @@ export { default as MultiSignalPanel } from './MultiSignalPanel';
 export { default as InsiderActivityCard } from './InsiderActivityCard';
 export { default as RegimeChip } from './RegimeChip';
 export { default as HealthBadge } from './HealthBadge';
+export { default as CorrelationCard } from './CorrelationCard';
