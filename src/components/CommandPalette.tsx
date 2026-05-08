@@ -28,6 +28,7 @@ export type PaletteAction =
   // Position actions
   | { kind: 'manage-position'; tradeId: string; ticker: string }
   | { kind: 'log-new-trade'; ticker?: string }
+  | { kind: 'view-trade-history'; ticker?: string }
   // Options actions
   | { kind: 'options-chain'; ticker: string }
   | { kind: 'options-template'; structure: string; ticker: string }
@@ -93,6 +94,8 @@ export default function CommandPalette() {
   const setSelectedTicker = usePriceStore((s) => s.setSelectedTicker);
   const selectedTicker = usePriceStore((s) => s.selectedTicker);
   const trades = useTradeStore((s) => s.trades);
+  const paperOpen = usePaperStore((s) => s.open);
+  const paperClosed = usePaperStore((s) => s.closed);
 
   // Recent commands (localStorage)
   const [recentIds, setRecentIds] = useState<string[]>(() => {
@@ -165,18 +168,77 @@ export default function CommandPalette() {
       });
     }
 
-    // === Tickers (active watchlist) ===
-    const tickers = settings.watchlist ?? [];
-    for (const t of tickers) {
+    // === Tickers — discover from EVERY source, not just watchlist ===
+    // The user can find any ticker they've ever touched (open / closed
+    // trades, paper positions, strategies, current watchlist).
+    const watchlistTickers = settings.watchlist ?? [];
+    const tradeTickers = Array.from(new Set(trades.map((t) => t.ticker)));
+    const paperOpenTickers = Array.from(new Set(paperOpen.map((p) => p.ticker)));
+    const paperClosedTickers = Array.from(new Set(paperClosed.map((p) => p.ticker)));
+    const strategyTickers = Array.from(
+      new Set(strategies.flatMap((s) => s.tickers))
+    );
+    const allTickers = Array.from(
+      new Set([
+        ...watchlistTickers,
+        ...tradeTickers,
+        ...paperOpenTickers,
+        ...paperClosedTickers,
+        ...strategyTickers,
+      ])
+    ).sort();
+
+    const watchlistSet = new Set(watchlistTickers);
+    const openTradeTickers = new Set(
+      trades.filter((t) => t.status === 'open').map((t) => t.ticker)
+    );
+    const closedTradeTickers = new Set(
+      trades.filter((t) => t.status === 'closed').map((t) => t.ticker)
+    );
+
+    for (const t of allTickers) {
       const isSelected = t === selectedTicker;
+      const inWatchlist = watchlistSet.has(t);
+      const hasOpenTrade = openTradeTickers.has(t);
+      const hasClosedTrade = closedTradeTickers.has(t);
+
+      // Build a hint that tells the user where this ticker lives
+      const hints: string[] = [];
+      if (isSelected) hints.push('selected');
+      if (inWatchlist) hints.push('watchlist');
+      if (hasOpenTrade) hints.push('open trade');
+      else if (hasClosedTrade) hints.push('history');
+
+      // 1) Switch chart to ticker (works for any discovered ticker)
       out.push({
         id: `ticker-${t}`,
         label: t,
-        hint: isSelected ? 'currently selected' : 'switch chart to ticker',
+        hint: hints.length > 0 ? hints.join(' · ') : 'set as active ticker',
         category: 'Tickers',
         action: { kind: 'select-ticker', ticker: t },
       });
-      // Per-ticker quick actions
+
+      // 2) Add to watchlist (only when not already in)
+      if (!inWatchlist) {
+        out.push({
+          id: `ticker-${t}-add`,
+          label: `Add ${t} to watchlist`,
+          category: 'Watchlist edits',
+          action: { kind: 'add-ticker', ticker: t },
+        });
+      }
+
+      // 3) Remove from watchlist (only when in watchlist)
+      if (inWatchlist) {
+        out.push({
+          id: `ticker-${t}-remove`,
+          label: `Remove ${t} from watchlist`,
+          category: 'Watchlist edits',
+          action: { kind: 'remove-ticker', ticker: t },
+        });
+      }
+
+      // 4) Options chain
       out.push({
         id: `ticker-${t}-options`,
         label: `Options chain · ${t}`,
@@ -184,18 +246,26 @@ export default function CommandPalette() {
         category: 'Options',
         action: { kind: 'options-chain', ticker: t },
       });
+
+      // 5) Log new trade
       out.push({
         id: `ticker-${t}-newtrade`,
         label: `Log new ${t} trade`,
         category: 'New trade',
         action: { kind: 'log-new-trade', ticker: t },
       });
-      out.push({
-        id: `ticker-${t}-remove`,
-        label: `Remove ${t} from watchlist`,
-        category: 'Watchlist edits',
-        action: { kind: 'remove-ticker', ticker: t },
-      });
+
+      // 6) View trade history filtered to this ticker
+      if (hasOpenTrade || hasClosedTrade) {
+        const count = trades.filter((tr) => tr.ticker === t).length;
+        out.push({
+          id: `ticker-${t}-history`,
+          label: `${t} trade history`,
+          hint: `${count} trade${count === 1 ? '' : 's'}`,
+          category: 'Tickers',
+          action: { kind: 'view-trade-history', ticker: t },
+        });
+      }
     }
 
     // === Strategies ===
@@ -398,7 +468,13 @@ export default function CommandPalette() {
       }
     };
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    // `/` and other surfaces dispatch this to open the palette
+    const openHandler = () => setOpen(true);
+    window.addEventListener('etf-open-palette', openHandler);
+    return () => {
+      window.removeEventListener('keydown', handler);
+      window.removeEventListener('etf-open-palette', openHandler);
+    };
   }, []);
 
   // Reset state when opening
@@ -505,6 +581,16 @@ export default function CommandPalette() {
           // NewTradePanel listens for this to pre-fill ticker
           window.dispatchEvent(
             new CustomEvent('etf-new-trade-ticker', { detail: a.ticker })
+          );
+        }
+        return;
+
+      case 'view-trade-history':
+        window.dispatchEvent(new CustomEvent('etf-open-drawer', { detail: 'trades' }));
+        if (a.ticker) {
+          // TradesPanel listens for this to filter by ticker
+          window.dispatchEvent(
+            new CustomEvent('etf-trades-filter-ticker', { detail: a.ticker })
           );
         }
         return;

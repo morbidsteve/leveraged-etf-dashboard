@@ -22,14 +22,19 @@ export default function MainLayout({
   activeDrawer,
 }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
 
   const handleRefresh = useCallback(() => {
     if (onRefresh) onRefresh();
     else window.location.reload();
   }, [onRefresh]);
 
-  const handleSearch = useCallback(() => setShowSearch(true), []);
+  // `/` routes to the Cmd+K palette so there's one universal search
+  // surface. The palette listens for etf-open-palette to open itself.
+  const handleSearch = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('etf-open-palette'));
+    }
+  }, []);
 
   useKeyboardShortcuts({
     onRefresh: handleRefresh,
@@ -44,33 +49,6 @@ export default function MainLayout({
         onSelectDrawer={onSelectDrawer}
         activeDrawer={activeDrawer}
       />
-
-      {showSearch && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center pt-20"
-          onClick={() => setShowSearch(false)}
-        >
-          <div
-            className="glass-strong rounded-xl w-full max-w-lg mx-4 shadow-glow"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4">
-              <input
-                type="text"
-                placeholder="Search trades, tickers..."
-                className="input w-full text-lg"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setShowSearch(false);
-                }}
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                Press <kbd className="kbd">Esc</kbd> to close
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="fixed top-0 left-0 right-0 h-14 glass-strong flex items-center px-4 z-30 lg:hidden">
         <button

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useTradeStore, usePriceStore } from '@/store';
 import { useStoreHydration } from '@/hooks';
 import { TradeFilters } from '@/types';
@@ -36,6 +36,18 @@ export default function TradesPanel({ onSelectTrade }: TradesPanelProps) {
 
   const [sortBy, setSortBy] = useState<'date' | 'pnl' | 'ticker'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Cmd+K palette: jump here pre-filtered by ticker
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<string>;
+      if (ev.detail) {
+        setFilters((f) => ({ ...f, ticker: ev.detail.toUpperCase() }));
+      }
+    };
+    window.addEventListener('etf-trades-filter-ticker', handler);
+    return () => window.removeEventListener('etf-trades-filter-ticker', handler);
+  }, []);
 
   const filteredTrades = useMemo(() => {
     let result = [...trades];
