@@ -23,6 +23,7 @@ import ConditionTreeView from './ConditionTreeView';
 import StrategyExplainerCard from './StrategyExplainerCard';
 import MLScoreCard from './MLScoreCard';
 import RiskAnalysisCard from './RiskAnalysisCard';
+import KellyCard from './KellyCard';
 import { scoreStrategy } from '@/lib/strategy/signalScoring';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
@@ -438,6 +439,7 @@ function StrategyDetail({
       <StrategyExplainerCard strategy={strategy} />
       <MLScoreCard strategy={strategy} />
       <RiskAnalysisCard strategy={strategy} />
+      <KellyCard strategy={strategy} />
 
       <Field label={`Tickers (${strategy.tickers.length})`}>
         <TickersPicker

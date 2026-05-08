@@ -104,6 +104,22 @@ export default function CommandCenterPage() {
   const [showRSIConfig, setShowRSIConfig] = useState(false);
   const [drawer, setDrawer] = useState<DrawerView>(null);
 
+  // Honor `?d=<view>` deep-link query param. Used by the lightweight
+  // /alerts /analytics /calculator /scanner / etc. redirect routes
+  // to land on the dashboard with the matching drawer pre-opened.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const d = params.get('d');
+    if (d) {
+      setDrawer(d as DrawerView);
+      // Clean up the URL so a manual reload doesn't re-trigger
+      const url = new URL(window.location.href);
+      url.searchParams.delete('d');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
   const defaultWatchlist = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA'];
   const rsiConfig = storeHydrated ? settings.rsiConfig : DEFAULT_RSI_CONFIG;
   const watchlist = storeHydrated && settings.watchlist ? settings.watchlist : defaultWatchlist;
