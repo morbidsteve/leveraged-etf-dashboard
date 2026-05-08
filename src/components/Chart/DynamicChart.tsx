@@ -32,6 +32,7 @@ interface DynamicChartProps {
   stopLines?: Array<{ ticker: string; price: number; tradeId: string }>;
   entryLines?: Array<{ ticker: string; price: number; tradeId: string }>;
   showPatterns?: boolean;
+  onStopDrag?: (tradeId: string, newPrice: number) => void;
 }
 
 export default function DynamicChart(props: DynamicChartProps) {

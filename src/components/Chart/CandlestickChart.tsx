@@ -24,6 +24,7 @@ import {
   calculateBollingerBands,
 } from '@/lib/indicators';
 import { detectPatterns } from '@/lib/patterns';
+import StopDragHandles from './StopDragHandles';
 
 interface TradeMarker {
   time: number; // Unix timestamp in seconds
@@ -61,6 +62,8 @@ interface CandlestickChartProps {
   entryLines?: Array<{ ticker: string; price: number; tradeId: string }>;
   /** Show candlestick pattern markers (hammer, engulfing, etc.). */
   showPatterns?: boolean;
+  /** Called when the user finishes dragging a stop line to a new price. */
+  onStopDrag?: (tradeId: string, newPrice: number) => void;
 }
 
 // Helper to extract trade markers from trades
@@ -180,6 +183,7 @@ export default function CandlestickChart({
   stopLines = [],
   entryLines = [],
   showPatterns = false,
+  onStopDrag,
 }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
@@ -889,9 +893,19 @@ export default function CandlestickChart({
     <div ref={wrapperRef} className="w-full h-full relative">
       <div
         ref={chartContainerRef}
-        className="w-full"
+        className="w-full relative"
         style={{ height: mainChartHeight }}
-      />
+      >
+        {onStopDrag && stopLines.length > 0 && candlestickSeriesRef.current && (
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          <StopDragHandles
+            stops={stopLines}
+            seriesRef={candlestickSeriesRef as any}
+            chartHeight={mainChartHeight}
+            onCommit={onStopDrag}
+          />
+        )}
+      </div>
       {showRSI && (
         <div className="mt-1">
           <div className="text-xs text-gray-500 px-2">RSI ({rsiConfig.period})</div>

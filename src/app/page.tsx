@@ -178,6 +178,7 @@ export default function CommandCenterPage() {
   const { priceData, candles, rsiData, isLoading, error, refresh } = selectedData;
 
   const trades = useTradeStore((state) => state.trades);
+  const updateTradeStop = useTradeStore((state) => state.updateTrade);
   const prices = usePriceStore((state) => state.prices);
   const strategies = useStrategyStore((state) => state.strategies);
   const paperClosed = usePaperStore((state) => state.closed);
@@ -615,6 +616,9 @@ export default function CommandCenterPage() {
                     entryLines={trades
                       .filter((t) => t.status === 'open' && t.ticker === selectedTicker)
                       .map((t) => ({ ticker: t.ticker, price: t.avgCost, tradeId: t.id }))}
+                    onStopDrag={(tradeId, newPrice) =>
+                      updateTradeStop(tradeId, { stopPrice: newPrice })
+                    }
                   />
                 </div>
               ) : (

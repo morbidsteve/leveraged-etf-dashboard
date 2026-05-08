@@ -19,6 +19,7 @@ import {
 } from '@/types/strategy';
 import { tick } from '@/lib/strategy/evaluator';
 import { dispatchAutoOrder } from '@/lib/strategy/autoExecutor';
+import { trackOrderToTerminal } from '@/lib/strategy/orderTracker';
 import { captureSnapshot } from '@/lib/snapshot';
 import { calculateRSIWithTimestamps } from '@/lib/rsi';
 import { calculateEMA, calculateSMA } from '@/lib/indicators';
@@ -294,7 +295,7 @@ export function useStrategyEngine(opts: {
           // Fire-and-forget POST to the server-side place-order route.
           // Tokens live server-side; the browser only forwards the action.
           dispatchAutoOrder(action, ctx.price, strategy)
-            .then((result) => {
+            .then(async (result) => {
               appendEvents([
                 {
                   strategyId: strategy.id,
@@ -305,6 +306,41 @@ export function useStrategyEngine(opts: {
                   } (orderId ${result.orderId ?? 'n/a'})`,
                 },
               ]);
+              // Track to terminal — capture actual fill price + status
+              if (!result.orderId) return;
+              const term = await trackOrderToTerminal(result.orderId);
+              if (term.status === 'FILLED') {
+                appendEvents([
+                  {
+                    strategyId: strategy.id,
+                    timestamp: new Date(),
+                    type: 'fill',
+                    detail: `Order ${result.orderId} FILLED: ${
+                      term.filledQuantity ?? result.shares
+                    } ${result.symbol} @ $${
+                      term.filledPrice?.toFixed(2) ?? '—'
+                    } (vs submitted $${result.submittedPrice?.toFixed(2) ?? '—'})`,
+                  },
+                ]);
+                fireNotification({
+                  title: `✅ Filled: ${result.symbol}`,
+                  body: `${term.filledQuantity ?? result.shares} @ $${
+                    term.filledPrice?.toFixed(2) ?? '—'
+                  }`,
+                  tag: `strat-${strategy.id}-${ticker}-filled`,
+                });
+              } else {
+                appendEvents([
+                  {
+                    strategyId: strategy.id,
+                    timestamp: new Date(),
+                    type: 'error',
+                    detail: `Order ${result.orderId} ${term.status}${
+                      term.error ? `: ${term.error}` : ''
+                    }`,
+                  },
+                ]);
+              }
             })
             .catch((err) => {
               const msg = err instanceof Error ? err.message : String(err);
