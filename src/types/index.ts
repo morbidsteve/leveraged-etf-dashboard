@@ -223,6 +223,7 @@ export interface PositionAlertSettings {
 // App state types
 export interface AppSettings {
   theme: 'dark' | 'light';
+  density?: 'comfortable' | 'compact';
   defaultTicker: string;
   rsiConfig: RSIConfig;
   alertSettings: AlertSettings;

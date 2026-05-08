@@ -364,6 +364,57 @@ export default function SettingsPanel() {
       <TabPanel id="strategy" active={activeTab}>
       <div className="card">
         <div className="card-header">
+          <h2 className="font-medium text-white">Appearance</h2>
+        </div>
+        <div className="card-body space-y-4">
+          <div>
+            <label className="label">Theme</label>
+            <div className="flex gap-2">
+              {(['dark', 'light'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => updateSettings({ theme: t })}
+                  className={`text-xs px-3 py-1.5 rounded border ${
+                    settings.theme === t
+                      ? 'bg-accent/20 border-accent/40 text-accent-light'
+                      : 'bg-white/[0.03] border-white/10 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {t.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-gray-500 mt-1">
+              Light theme is experimental — chart colors stay dark-optimized.
+            </p>
+          </div>
+          <div>
+            <label className="label">Density</label>
+            <div className="flex gap-2">
+              {(['comfortable', 'compact'] as const).map((d) => (
+                <button
+                  key={d}
+                  onClick={() => updateSettings({ density: d })}
+                  className={`text-xs px-3 py-1.5 rounded border ${
+                    (settings.density ?? 'comfortable') === d
+                      ? 'bg-accent/20 border-accent/40 text-accent-light'
+                      : 'bg-white/[0.03] border-white/10 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {d.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-gray-500 mt-1">
+              Compact tightens padding across cards / buttons / tables.
+              Useful on smaller screens or for max info density.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
           <h2 className="font-medium text-white">General</h2>
         </div>
         <div className="card-body space-y-4">

@@ -21,6 +21,7 @@ import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
 import CommandPalette from '@/components/CommandPalette';
 import ShortcutsHelp from '@/components/ShortcutsHelp';
 import PositionActionModal, { PositionActionTarget } from '@/components/PositionActionModal';
+import ThemeManager from '@/components/ThemeManager';
 import { ToastHost } from '@/components/UI';
 import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel, StrategyMonitor } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
@@ -719,6 +720,9 @@ export default function CommandCenterPage() {
 
       {/* ALERT TOAST — surfaces live signals in the corner */}
       <AlertToast onOpenPanel={() => setDrawer('alerts')} />
+
+      {/* THEME / DENSITY — applies classes to <html> */}
+      <ThemeManager />
 
       {/* COMMAND PALETTE — Cmd+K universal jump */}
       <CommandPalette />
