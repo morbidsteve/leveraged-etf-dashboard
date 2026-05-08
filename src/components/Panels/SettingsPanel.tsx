@@ -7,13 +7,15 @@ import { Trade } from '@/types';
 import { SchwabConnectCard } from '@/components/Strategy';
 import { downloadBundle, applyBundle } from '@/lib/exportImport';
 import { Tabs, TabPanel, TabDef } from '@/components/UI';
+import WatchlistManager from './WatchlistManager';
 
-type SettingsTab = 'broker' | 'risk' | 'strategy' | 'scanner' | 'data' | 'help';
+type SettingsTab = 'broker' | 'risk' | 'strategy' | 'watchlists' | 'scanner' | 'data' | 'help';
 
 const SETTINGS_TABS: TabDef<SettingsTab>[] = [
   { id: 'broker', label: 'Broker' },
   { id: 'risk', label: 'Risk & guardrails' },
   { id: 'strategy', label: 'Strategy defaults' },
+  { id: 'watchlists', label: 'Watchlists' },
   { id: 'scanner', label: 'Scanner' },
   { id: 'data', label: 'Data' },
   { id: 'help', label: 'Help' },
@@ -250,6 +252,10 @@ export default function SettingsPanel() {
           </button>
         </div>
       </div>
+      </TabPanel>
+
+      <TabPanel id="watchlists" active={activeTab}>
+        <WatchlistManager />
       </TabPanel>
 
       <TabPanel id="scanner" active={activeTab}>

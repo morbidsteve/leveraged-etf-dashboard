@@ -188,6 +188,14 @@ export interface ScannerSettings {
   dataSource: 'yahoo' | 'finnhub';
 }
 
+/** A named collection of tickers. Multiple watchlists can exist; one is
+ * "active" at a time (settings.activeWatchlistId). */
+export interface Watchlist {
+  id: string;
+  name: string;
+  tickers: string[];
+}
+
 // App state types
 export interface AppSettings {
   theme: 'dark' | 'light';
@@ -196,7 +204,9 @@ export interface AppSettings {
   alertSettings: AlertSettings;
   refreshInterval: number; // in milliseconds
   scannerSettings: ScannerSettings;
-  watchlist: string[]; // User's watchlist tickers
+  watchlist: string[]; // legacy — single-list view (mirror of active watchlist's tickers)
+  watchlists?: Watchlist[];        // named multi-list collection
+  activeWatchlistId?: string;      // which watchlist is currently active
   chartSettings: {
     interval: '1m' | '5m' | '15m' | '1h' | '1d';
     range: '1d' | '5d' | '1mo' | '3mo';

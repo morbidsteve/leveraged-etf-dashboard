@@ -15,11 +15,12 @@ import {
   SettingsPanel,
   NewTradePanel,
 } from '@/components/Panels';
-import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useStrategyEngine } from '@/hooks';
+import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useAlertRuleEngine, useStrategyEngine } from '@/hooks';
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
 import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel, StrategyMonitor } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
 import { useTradeStore, usePriceStore, useSettingsStore, useStrategyStore, usePaperStore } from '@/store';
+import type { Watchlist } from '@/types';
 import {
   calculatePortfolioSummary,
   formatCurrency,
@@ -181,6 +182,10 @@ export default function CommandCenterPage() {
   // Mount the alert engine — watches RSI across all watchlist tickers and
   // fires sounds + browser notifications + toast on threshold crossings.
   useAlertEngine();
+
+  // Mount the custom alert-rule engine — evaluates user-defined ConditionTree
+  // rules across their tickers and fires per-channel notifications with cooldown.
+  useAlertRuleEngine();
 
   // Read ?d=<drawer> from URL on mount (sidebar redirects from old pages
   // and shareable deep-links land here with a drawer pre-opened). Strip
@@ -435,6 +440,11 @@ export default function CommandCenterPage() {
               {showAddTicker ? 'Cancel' : '+ Add'}
             </button>
           </div>
+
+          {/* Active watchlist switcher */}
+          <ActiveWatchlistSwitcher
+            onManage={() => setDrawer('settings')}
+          />
 
           {showAddTicker && (
             <div className="flex items-center gap-2">
@@ -1101,5 +1111,37 @@ function ActionTile({
         {label}
       </span>
     </button>
+  );
+}
+
+function ActiveWatchlistSwitcher({ onManage }: { onManage: () => void }) {
+  const settings = useSettingsStore((s) => s.settings);
+  const setActive = useSettingsStore((s) => s.setActiveWatchlist);
+  const lists: Watchlist[] = settings.watchlists ?? [];
+  const activeId = settings.activeWatchlistId ?? lists[0]?.id;
+  // If there's only one list, hide the chip — no point cluttering UI.
+  if (lists.length <= 1) return null;
+  return (
+    <div className="flex items-center gap-1 text-[10px]">
+      <select
+        value={activeId}
+        onChange={(e) => setActive(e.target.value)}
+        className="bg-white/[0.03] border border-white/10 rounded px-1.5 py-0.5 text-gray-300 hover:text-white focus:outline-none focus:border-accent/40 truncate max-w-[120px]"
+        title="Switch active watchlist"
+      >
+        {lists.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.name} ({l.tickers.length})
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={onManage}
+        className="text-gray-500 hover:text-white"
+        title="Manage watchlists"
+      >
+        ⚙
+      </button>
+    </div>
   );
 }

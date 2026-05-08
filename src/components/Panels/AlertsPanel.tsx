@@ -2,6 +2,7 @@
 
 import { useAlertStore } from '@/store';
 import { format } from 'date-fns';
+import CustomAlertRulesPanel from './CustomAlertRulesPanel';
 
 const ALERT_TYPE_LABELS: Record<string, string> = {
   rsi_oversold: 'RSI Oversold (Buy Signal)',
@@ -32,6 +33,8 @@ export default function AlertsPanel() {
 
   return (
     <div className="space-y-6">
+      <CustomAlertRulesPanel />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-3">
           <div className="flex items-center justify-between">

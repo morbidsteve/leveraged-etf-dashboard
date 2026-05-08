@@ -4,6 +4,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 export { useStrategyStore } from './strategyStore';
 export { usePaperStore } from './paperStore';
 export type { PaperEntry, PaperTrade, TradeSnapshot } from './paperStore';
+export { useAlertRuleStore } from './alertRuleStore';
+export type { AlertRule, AlertRuleFire } from './alertRuleStore';
 import {
   Trade,
   TradeEntry,
@@ -17,6 +19,7 @@ import {
   ChartTimeframe,
   AppSettings,
   ScannerSettings,
+  Watchlist,
 } from '@/types';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 import { calculateAvgCost, calculateTotalShares, calculateRealizedPnL, generateId } from '@/lib/calculations';
@@ -308,6 +311,57 @@ interface SettingsState {
   addToWatchlist: (ticker: string) => void;
   removeFromWatchlist: (ticker: string) => void;
   updateChartSettings: (settings: Partial<AppSettings['chartSettings']>) => void;
+  // Multi-watchlist actions
+  addWatchlist: (name: string, tickers?: string[]) => Watchlist;
+  renameWatchlist: (id: string, name: string) => void;
+  deleteWatchlist: (id: string) => void;
+  setActiveWatchlist: (id: string) => void;
+  duplicateWatchlist: (id: string) => Watchlist | null;
+}
+
+const DEFAULT_WATCHLIST_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA'];
+
+/**
+ * Lazy-init the multi-watchlist fields on a settings object. If watchlists
+ * is missing/empty, seed from the legacy `watchlist` array. Returns a clone
+ * of settings with watchlists/activeWatchlistId guaranteed populated and
+ * with `watchlist` mirrored from the active list's tickers.
+ */
+function ensureWatchlists(settings: AppSettings): AppSettings {
+  const lists = settings.watchlists ?? [];
+  if (lists.length === 0) {
+    const seedTickers =
+      settings.watchlist && settings.watchlist.length > 0
+        ? settings.watchlist
+        : DEFAULT_WATCHLIST_TICKERS;
+    const seed: Watchlist = {
+      id: 'default',
+      name: 'Default',
+      tickers: seedTickers,
+    };
+    return {
+      ...settings,
+      watchlists: [seed],
+      activeWatchlistId: 'default',
+      watchlist: seedTickers,
+    };
+  }
+  // Ensure activeWatchlistId points to a valid list
+  let activeId = settings.activeWatchlistId;
+  if (!activeId || !lists.find((l) => l.id === activeId)) {
+    activeId = lists[0].id;
+  }
+  const active = lists.find((l) => l.id === activeId)!;
+  return {
+    ...settings,
+    watchlists: lists,
+    activeWatchlistId: activeId,
+    watchlist: active.tickers, // mirror for legacy consumers
+  };
+}
+
+function genWatchlistId(): string {
+  return `wl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -382,29 +436,128 @@ export const useSettingsStore = create<SettingsState>()(
 
       addToWatchlist: (ticker) =>
         set((state) => {
+          const settings = ensureWatchlists(state.settings);
           const upperTicker = ticker.toUpperCase();
-          const currentWatchlist = state.settings.watchlist || ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA'];
-          if (currentWatchlist.includes(upperTicker)) {
-            return state; // Already in watchlist
-          }
+          const activeId = settings.activeWatchlistId!;
+          const watchlists = settings.watchlists!.map((l) => {
+            if (l.id !== activeId) return l;
+            if (l.tickers.includes(upperTicker)) return l;
+            return { ...l, tickers: [...l.tickers, upperTicker] };
+          });
+          const active = watchlists.find((l) => l.id === activeId)!;
           return {
             settings: {
-              ...state.settings,
-              watchlist: [...currentWatchlist, upperTicker],
+              ...settings,
+              watchlists,
+              watchlist: active.tickers,
             },
           };
         }),
 
       removeFromWatchlist: (ticker) =>
         set((state) => {
-          const currentWatchlist = state.settings.watchlist || ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA'];
+          const settings = ensureWatchlists(state.settings);
+          const upper = ticker.toUpperCase();
+          const activeId = settings.activeWatchlistId!;
+          const watchlists = settings.watchlists!.map((l) => {
+            if (l.id !== activeId) return l;
+            return { ...l, tickers: l.tickers.filter((t) => t !== upper) };
+          });
+          const active = watchlists.find((l) => l.id === activeId)!;
           return {
             settings: {
-              ...state.settings,
-              watchlist: currentWatchlist.filter((t) => t !== ticker.toUpperCase()),
+              ...settings,
+              watchlists,
+              watchlist: active.tickers,
             },
           };
         }),
+
+      addWatchlist: (name, tickers = []) => {
+        const id = genWatchlistId();
+        const newList: Watchlist = {
+          id,
+          name: name.trim() || 'Untitled',
+          tickers: tickers.map((t) => t.toUpperCase()),
+        };
+        set((state) => {
+          const settings = ensureWatchlists(state.settings);
+          return {
+            settings: {
+              ...settings,
+              watchlists: [...settings.watchlists!, newList],
+            },
+          };
+        });
+        return newList;
+      },
+
+      renameWatchlist: (id, name) =>
+        set((state) => {
+          const settings = ensureWatchlists(state.settings);
+          return {
+            settings: {
+              ...settings,
+              watchlists: settings.watchlists!.map((l) =>
+                l.id === id ? { ...l, name: name.trim() || l.name } : l
+              ),
+            },
+          };
+        }),
+
+      deleteWatchlist: (id) =>
+        set((state) => {
+          const settings = ensureWatchlists(state.settings);
+          // Refuse to delete the last list
+          if (settings.watchlists!.length <= 1) return state;
+          const remaining = settings.watchlists!.filter((l) => l.id !== id);
+          let activeId = settings.activeWatchlistId!;
+          if (activeId === id) activeId = remaining[0].id;
+          const active = remaining.find((l) => l.id === activeId)!;
+          return {
+            settings: {
+              ...settings,
+              watchlists: remaining,
+              activeWatchlistId: activeId,
+              watchlist: active.tickers,
+            },
+          };
+        }),
+
+      setActiveWatchlist: (id) =>
+        set((state) => {
+          const settings = ensureWatchlists(state.settings);
+          if (!settings.watchlists!.find((l) => l.id === id)) return state;
+          const active = settings.watchlists!.find((l) => l.id === id)!;
+          return {
+            settings: {
+              ...settings,
+              activeWatchlistId: id,
+              watchlist: active.tickers,
+            },
+          };
+        }),
+
+      duplicateWatchlist: (id) => {
+        let duplicated: Watchlist | null = null;
+        set((state) => {
+          const settings = ensureWatchlists(state.settings);
+          const src = settings.watchlists!.find((l) => l.id === id);
+          if (!src) return state;
+          duplicated = {
+            id: genWatchlistId(),
+            name: `${src.name} copy`,
+            tickers: [...src.tickers],
+          };
+          return {
+            settings: {
+              ...settings,
+              watchlists: [...settings.watchlists!, duplicated],
+            },
+          };
+        });
+        return duplicated;
+      },
 
       updateChartSettings: (chartSettings) =>
         set((state) => ({
