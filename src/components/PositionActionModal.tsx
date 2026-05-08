@@ -51,9 +51,13 @@ export default function PositionActionModal({ target, onClose }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [schwabConnected, setSchwabConnected] = useState(false);
 
-  // Resolve the underlying position
+  // Resolve the underlying position. Treat manual trades as "still here"
+  // only while they're actually open — once status flips to 'closed' (or
+  // the row vanishes), we want the modal to disappear cleanly.
   const manualTrade =
-    target?.kind === 'manual' ? trades.find((t) => t.id === target.tradeId) : null;
+    target?.kind === 'manual'
+      ? trades.find((t) => t.id === target.tradeId && t.status === 'open')
+      : null;
   const paperEntry =
     target?.kind === 'paper'
       ? open.find((p) => p.strategyId === target.strategyId && p.ticker === target.ticker)
@@ -100,12 +104,17 @@ export default function PositionActionModal({ target, onClose }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [target, onClose]);
 
+  // Auto-close the modal when the underlying position vanishes — but do
+  // it from an effect, not during render. Render-time side effects are
+  // discouraged and can re-fire under React 18 concurrent rendering.
+  useEffect(() => {
+    if (target && !manualTrade && !paperEntry) {
+      onClose();
+    }
+  }, [target, manualTrade, paperEntry, onClose]);
+
   if (!target) return null;
-  if (!manualTrade && !paperEntry) {
-    // Position no longer exists (race) — auto-close
-    setTimeout(() => onClose(), 0);
-    return null;
-  }
+  if (!manualTrade && !paperEntry) return null;
 
   const handleClose = async (closeShares: number, reason: string) => {
     if (closeShares <= 0) return;
@@ -129,20 +138,39 @@ export default function PositionActionModal({ target, onClose }: Props) {
         // Optional broker leg — submitted FIRST so we don't journal a fill
         // we never actually placed.
         if (useBroker) {
-          const resp = await fetch('/api/schwab/orders/place', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'exit_signal',
-              symbol: manualTrade.ticker,
-              shares: closeShares,
-              livePrice,
-            }),
-          });
-          const data = await resp.json();
+          let resp: Response;
+          try {
+            resp = await fetch('/api/schwab/orders/place', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'exit_signal',
+                symbol: manualTrade.ticker,
+                shares: closeShares,
+                livePrice,
+              }),
+            });
+          } catch (netErr) {
+            showToast(
+              `Network error reaching broker: ${
+                netErr instanceof Error ? netErr.message : 'unknown'
+              }`,
+              'error',
+              5000
+            );
+            setSubmitting(false);
+            return;
+          }
+          // Tolerate non-JSON error pages
+          let data: { orderId?: string | null; error?: string } = {};
+          try {
+            data = await resp.json();
+          } catch {
+            data = {};
+          }
           if (!resp.ok) {
             showToast(
-              `Broker rejected: ${data.error ?? 'unknown'}`,
+              `Broker rejected: ${data.error ?? `HTTP ${resp.status}`}`,
               'error',
               5000
             );
@@ -163,6 +191,10 @@ export default function PositionActionModal({ target, onClose }: Props) {
       }
       onClose();
     } catch (e) {
+      // Surface to console too — Next.js's production error overlay
+      // ("Application error") was hiding the underlying message
+      // eslint-disable-next-line no-console
+      console.error('PositionActionModal close failed', e);
       showToast(e instanceof Error ? e.message : 'Failed to close', 'error', 5000);
     } finally {
       setSubmitting(false);

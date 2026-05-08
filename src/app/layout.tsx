@@ -10,6 +10,12 @@ export const metadata: Metadata = {
     title: 'ETF Watch',
     statusBarStyle: 'black-translucent',
   },
+  // The modern equivalent of apple-mobile-web-app-capable. Next's
+  // appleWebApp helper still emits the deprecated apple-* form for
+  // iOS compat; this adds the standards-track tag alongside it.
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
 };
 
 export const viewport: Viewport = {

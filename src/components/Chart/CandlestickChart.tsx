@@ -575,20 +575,32 @@ export default function CandlestickChart({
         isSyncingFromRsi = false;
       });
 
-      // Sync crosshairs between charts
+      // Sync crosshairs between charts. Wrapped in try/catch because
+      // lightweight-charts throws "Value is null" if the target series has
+      // no data point at the requested time (e.g. an RSI gap during the
+      // warmup window, or right after a chart re-renders with new data
+      // arrays). Trips Next.js's prod error overlay otherwise.
       chart.subscribeCrosshairMove((param) => {
-        if (param.time) {
-          rsiChart.setCrosshairPosition(0, param.time, rsiSeries);
-        } else {
-          rsiChart.clearCrosshairPosition();
+        try {
+          if (param.time) {
+            rsiChart.setCrosshairPosition(0, param.time, rsiSeries);
+          } else {
+            rsiChart.clearCrosshairPosition();
+          }
+        } catch {
+          // No data at that time on the RSI series — safe to ignore
         }
       });
 
       rsiChart.subscribeCrosshairMove((param) => {
-        if (param.time) {
-          chart.setCrosshairPosition(0, param.time, candlestickSeries);
-        } else {
-          chart.clearCrosshairPosition();
+        try {
+          if (param.time) {
+            chart.setCrosshairPosition(0, param.time, candlestickSeries);
+          } else {
+            chart.clearCrosshairPosition();
+          }
+        } catch {
+          // No data at that time on the candle series — safe to ignore
         }
       });
     }
