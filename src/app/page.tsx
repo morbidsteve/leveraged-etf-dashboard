@@ -5,7 +5,7 @@ import { MainLayout, Drawer, BottomTabBar } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel, InsiderActivityCard, RegimeChip, HealthBadge, CorrelationCard, EconCalendarBanner } from '@/components/Dashboard';
+import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel, InsiderActivityCard, RegimeChip, HealthBadge, CorrelationCard, EconCalendarBanner, DailySummaryCard } from '@/components/Dashboard';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -734,6 +734,7 @@ export default function CommandCenterPage() {
             />
           </div>
           <CorrelationCard />
+          <DailySummaryCard />
           <EarningsWidget tickers={watchlist} />
           <NewsStrip ticker={selectedTicker} />
           <InsiderActivityCard ticker={selectedTicker} />

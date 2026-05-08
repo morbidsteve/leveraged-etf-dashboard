@@ -14,3 +14,4 @@ export { default as RegimeChip } from './RegimeChip';
 export { default as HealthBadge } from './HealthBadge';
 export { default as CorrelationCard } from './CorrelationCard';
 export { default as EconCalendarBanner } from './EconCalendarBanner';
+export { default as DailySummaryCard } from './DailySummaryCard';
