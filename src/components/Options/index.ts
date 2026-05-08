@@ -5,3 +5,4 @@ export { default as StrategyBuilder } from './StrategyBuilder';
 export { default as PositionList } from './PositionList';
 export { default as GreeksDashboard } from './GreeksDashboard';
 export { default as PnLCurveChart } from './PnLCurveChart';
+export { default as EarningsRiskBanner } from './EarningsRiskBanner';

@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { formatCurrency } from '@/lib/calculations';
 import { showToast } from '@/components/UI';
 import PnLCurveChart from './PnLCurveChart';
+import { probabilityOfProfit } from '@/lib/options/probability';
 
 /**
  * List of open + closed options positions. Each open row shows:
@@ -229,11 +230,24 @@ function OpenRow({
         )}
       </div>
 
-      {/* P&L curve at expiration */}
+      {/* POP + P&L curve at expiration */}
       {livePrice && (
-        <div className="pt-2">
-          <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1">
-            P&L at expiration
+        <div className="pt-2 space-y-1">
+          <div className="flex items-center justify-between">
+            <div className="text-[9px] uppercase tracking-widest text-gray-500">
+              P&L at expiration
+            </div>
+            {(() => {
+              // Use the soonest leg's expiration to compute years-to-expiry,
+              // and approximate IV from the position's first leg fill (rough).
+              const yrs = Math.max(0.001, soonestDte / 252);
+              const pop = probabilityOfProfit(position, livePrice, yrs, 0.30);
+              return (
+                <div className="text-[10px] text-gray-400 font-mono">
+                  POP <span className="text-white">{(pop * 100).toFixed(0)}%</span>
+                </div>
+              );
+            })()}
           </div>
           <PnLCurveChart position={position} underlyingPrice={livePrice} />
         </div>

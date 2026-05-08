@@ -9,6 +9,7 @@ import {
   StrategyBuilder,
   PositionList,
   GreeksDashboard,
+  EarningsRiskBanner,
 } from '@/components/Options';
 import {
   OptionChain,
@@ -115,6 +116,7 @@ export default function OptionsPanel() {
 
       <TabPanel id="positions" active={activeTab}>
         <div className="space-y-4">
+          <EarningsRiskBanner />
           <GreeksDashboard />
           <PositionList />
         </div>
