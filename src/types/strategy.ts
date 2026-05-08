@@ -11,12 +11,19 @@ export type Timeframe = '1m' | '5m' | '15m' | '1h' | '1d';
 
 export type ValueRef =
   | { kind: 'literal'; value: number }
-  | { kind: 'price'; tf?: Timeframe }                          // close of the most recent bar at tf
-  | { kind: 'rsi'; period: number; tf?: Timeframe }
-  | { kind: 'ema'; period: number; tf?: Timeframe }
-  | { kind: 'sma'; period: number; tf?: Timeframe }
-  | { kind: 'vwap'; tf?: Timeframe }
-  | { kind: 'volume'; tf?: Timeframe }
+  /**
+   * Indicator values. Optional `ticker` lets a condition reference data
+   * from a DIFFERENT ticker than the strategy is acting on — e.g. "when
+   * SPY price > 600, buy TQQQ" sets ticker='SPY' on the price ValueRef
+   * even though the strategy's action ticker is TQQQ. The evaluator
+   * looks up the other ticker's data from ctx.byTicker.
+   */
+  | { kind: 'price'; tf?: Timeframe; ticker?: string }
+  | { kind: 'rsi'; period: number; tf?: Timeframe; ticker?: string }
+  | { kind: 'ema'; period: number; tf?: Timeframe; ticker?: string }
+  | { kind: 'sma'; period: number; tf?: Timeframe; ticker?: string }
+  | { kind: 'vwap'; tf?: Timeframe; ticker?: string }
+  | { kind: 'volume'; tf?: Timeframe; ticker?: string }
   | { kind: 'minutes_since_open' }            // 0 at 9:30 ET
   | { kind: 'entry_price' }                   // valid only in EXIT/STOP context
   | { kind: 'minutes_since_entry' }           // valid only in EXIT/STOP context
@@ -183,6 +190,20 @@ export interface DataContext {
   volume: number;
   /** Per-timeframe indicators for multi-timeframe conditions. */
   byTf?: Partial<Record<Timeframe, TimeframeIndicators>>;
+  /** Per-OTHER-ticker indicators for cross-asset conditions. Populated
+   * when a ValueRef in the strategy specifies a `ticker` different from
+   * the strategy's runtime ticker. */
+  byTicker?: Record<
+    string,
+    {
+      price: number;
+      rsi: Record<number, number>;
+      ema: Record<number, number>;
+      sma: Record<number, number>;
+      vwap: number | null;
+      volume: number;
+    }
+  >;
   timestamp: Date;
   // Position-relative values (set when in_position)
   entryPrice?: number;

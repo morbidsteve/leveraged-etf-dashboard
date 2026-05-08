@@ -1,5 +1,10 @@
 import { ConditionTree, DataContext, CompareOp, Timeframe, ValueRef } from '@/types/strategy';
-import { evaluateValue, describeValue, collectTimeframes as collectTimeframesFromValue } from './values';
+import {
+  evaluateValue,
+  describeValue,
+  collectTimeframes as collectTimeframesFromValue,
+  collectExternalTickers as collectExternalTickersFromValue,
+} from './values';
 
 /**
  * Evaluate a boolean condition against the current data context.
@@ -87,6 +92,38 @@ export function collectTimeframesFromCondition(cond: ConditionTree): Timeframe[]
   }
   function addRef(r: ValueRef) {
     for (const tf of collectTimeframesFromValue(r)) set.add(tf);
+  }
+}
+
+/** Walk a condition tree and collect every external (cross-ticker) symbol. */
+export function collectExternalTickersFromCondition(cond: ConditionTree): string[] {
+  const set = new Set<string>();
+  walk(cond);
+  return Array.from(set);
+
+  function walk(c: ConditionTree) {
+    switch (c.type) {
+      case 'and':
+      case 'or':
+        c.children.forEach(walk);
+        return;
+      case 'not':
+        walk(c.child);
+        return;
+      case 'compare':
+        addRef(c.left);
+        addRef(c.right);
+        return;
+      case 'cross':
+        addRef(c.target);
+        addRef(c.threshold);
+        return;
+      case 'time_window':
+        return;
+    }
+  }
+  function addRef(r: ValueRef) {
+    for (const t of collectExternalTickersFromValue(r)) set.add(t);
   }
 }
 

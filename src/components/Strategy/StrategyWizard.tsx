@@ -14,7 +14,8 @@ type EntryGoal =
   | 'price_above_vwap'
   | 'rsi_with_vwap'
   | 'natural_language'
-  | 'block_builder';
+  | 'block_builder'
+  | 'cross_asset_price';
 
 type ExitGoal =
   | 'price_target_pct'
@@ -60,6 +61,11 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
   const [entryNL, setEntryNL] = useState('');
   const [entryNLResult, setEntryNLResult] = useState<ParseResult | null>(null);
   const [entryBlockTree, setEntryBlockTree] = useState<ConditionTree>(DEFAULT_ENTRY_BLOCK_TREE);
+
+  // Cross-asset trigger ("when WATCH price OP value, action TRADE")
+  const [crossWatchTicker, setCrossWatchTicker] = useState('SPY');
+  const [crossOp, setCrossOp] = useState<'>=' | '<=' | '>' | '<'>('>=');
+  const [crossPrice, setCrossPrice] = useState(600);
 
   // Step 2: Exit
   const [exitGoal, setExitGoal] = useState<ExitGoal>('price_target_pct');
@@ -130,6 +136,13 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
         return entryNLResult?.tree ?? null;
       case 'block_builder':
         return blockTreeOrNull(entryBlockTree);
+      case 'cross_asset_price':
+        return {
+          type: 'compare',
+          left: { kind: 'price', ticker: crossWatchTicker.toUpperCase() },
+          op: crossOp,
+          right: { kind: 'literal', value: crossPrice },
+        };
     }
   };
 
@@ -301,8 +314,56 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
                   title: 'Build with blocks (drag-and-drop)',
                   body: 'Visual editor. Drag indicator/price/time blocks into AND/OR groups. Best for compound rules.',
                 },
+                {
+                  id: 'cross_asset_price',
+                  title: 'Cross-asset price trigger',
+                  body: 'Watch one ticker, trade another. E.g. "When SPY ≥ 600, buy TQQQ" — the watched ticker just needs to be in your watchlist for live monitoring.',
+                },
               ]}
             />
+            {entryGoal === 'cross_asset_price' && (
+              <div className="grid grid-cols-3 gap-3 pt-2 border-t border-white/5">
+                <Field label="Watch ticker (data source)">
+                  <input
+                    type="text"
+                    value={crossWatchTicker}
+                    onChange={(e) => setCrossWatchTicker(e.target.value.toUpperCase())}
+                    className="input w-full text-xs py-1.5 font-mono uppercase"
+                    placeholder="SPY"
+                  />
+                </Field>
+                <Field label="Operator">
+                  <select
+                    value={crossOp}
+                    onChange={(e) => setCrossOp(e.target.value as typeof crossOp)}
+                    className="input w-full text-xs py-1.5"
+                  >
+                    <option value=">=">≥ (at or above)</option>
+                    <option value=">">&gt; (above)</option>
+                    <option value="<=">≤ (at or below)</option>
+                    <option value="<">&lt; (below)</option>
+                  </select>
+                </Field>
+                <Field label="Price level ($)">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={crossPrice}
+                    onChange={(e) => setCrossPrice(Number(e.target.value))}
+                    className="input w-full text-xs py-1.5 font-mono"
+                  />
+                </Field>
+                <p className="col-span-3 text-[11px] text-gray-500 leading-relaxed">
+                  Trade ticker(s) configured in step 3. The strategy fires when{' '}
+                  <span className="font-mono text-white">{crossWatchTicker}</span> price{' '}
+                  {crossOp === '>=' ? '≥' : crossOp === '<=' ? '≤' : crossOp}{' '}
+                  <span className="font-mono text-white">${crossPrice}</span>, then buys
+                  the trade ticker(s) at market. <strong className="text-amber-300">
+                  Add {crossWatchTicker} to your watchlist</strong> so its price is being
+                  fetched live — otherwise the condition can't evaluate.
+                </p>
+              </div>
+            )}
             {(entryGoal === 'rsi_cross_oversold' ||
               entryGoal === 'rsi_above' ||
               entryGoal === 'rsi_with_vwap') && (
@@ -333,7 +394,7 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
                 </Field>
               </div>
             )}
-            {entryGoal !== 'natural_language' && entryGoal !== 'block_builder' && (
+            {entryGoal !== 'natural_language' && entryGoal !== 'block_builder' && entryGoal !== 'cross_asset_price' && (
               <Field label="Timeframe (optional)">
                 <select
                   value={entryTimeframe}
@@ -779,6 +840,7 @@ function autoName(entry: EntryGoal, exit: ExitGoal, tickers: string[]): string {
     rsi_with_vwap: 'RSI + VWAP',
     natural_language: 'Custom',
     block_builder: 'Blocks',
+    cross_asset_price: 'Cross-asset',
   };
   const x: Record<ExitGoal, string> = {
     price_target_pct: 'target',

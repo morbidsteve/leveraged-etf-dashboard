@@ -25,7 +25,7 @@ import { calculateEMA, calculateSMA } from '@/lib/indicators';
 import { playBuyTone, playSellTone } from '@/lib/sound';
 import { fireNotification } from '@/lib/notify';
 import { useMultiTfData, TfRequirement } from './useMultiTfData';
-import { collectTimeframesFromCondition } from '@/lib/strategy/conditions';
+import { collectTimeframesFromCondition, collectExternalTickersFromCondition } from '@/lib/strategy/conditions';
 import { useMemo } from 'react';
 
 /**
@@ -89,6 +89,43 @@ export function useStrategyEngine(opts: {
     const newEvents: Omit<StrategyEvent, 'id'>[] = [];
 
     for (const strategy of enabled) {
+      // Cross-asset support — build a map of every external ticker
+      // referenced anywhere in the strategy's conditions. Each is fetched
+      // from the live price/candles store and folded into byTicker on the
+      // DataContext below.
+      const externalTickers = Array.from(
+        new Set([
+          ...collectExternalTickersFromCondition(strategy.entry.when),
+          ...collectExternalTickersFromCondition(strategy.exit.when),
+        ])
+      );
+      const byTicker: NonNullable<DataContext['byTicker']> = {};
+      for (const xt of externalTickers) {
+        const xCandles = candlesByTicker[xt] || [];
+        const xLive = pricesByTicker[xt];
+        if (xCandles.length === 0 || !xLive) continue;
+        const xRsiConfig = strategy.rsiConfig ?? globalRsiConfig;
+        const xRsi = calculateRSIWithTimestamps(xCandles, xRsiConfig.period);
+        const xEma20 = calculateEMA(xCandles, 20);
+        const xEma50 = calculateEMA(xCandles, 50);
+        const xSma20 = calculateSMA(xCandles, 20);
+        byTicker[xt] = {
+          price: xLive.price,
+          rsi: {
+            [xRsiConfig.period]: xRsi.length ? xRsi[xRsi.length - 1].value : Number.NaN,
+          },
+          ema: {
+            20: xEma20.length ? xEma20[xEma20.length - 1].value : Number.NaN,
+            50: xEma50.length ? xEma50[xEma50.length - 1].value : Number.NaN,
+          },
+          sma: {
+            20: xSma20.length ? xSma20[xSma20.length - 1].value : Number.NaN,
+          },
+          vwap: null,
+          volume: xLive.volume,
+        };
+      }
+
       // Iterate per ticker — each (strategy, ticker) is an independent runtime
       for (const ticker of strategy.tickers) {
         const candles = candlesByTicker[ticker] || [];
@@ -117,6 +154,7 @@ export function useStrategyEngine(opts: {
           vwap: null,
           volume: live.volume,
           byTf: multiTf[ticker],
+          byTicker: Object.keys(byTicker).length > 0 ? byTicker : undefined,
           timestamp: live.timestamp instanceof Date ? live.timestamp : new Date(live.timestamp),
         };
 
