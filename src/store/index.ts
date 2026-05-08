@@ -136,6 +136,18 @@ export const useTradeStore = create<TradeState>()(
           trades: [...state.trades, newTrade],
         }));
 
+        // Fire trade.opened webhook (best-effort, fire-and-forget)
+        if (typeof window !== 'undefined') {
+          import('./webhookStore').then(({ fireWebhook }) => {
+            fireWebhook('trade.opened', {
+              tradeId: newTrade.id,
+              ticker: newTrade.ticker,
+              shares: newTrade.totalShares,
+              avgCost: newTrade.avgCost,
+            });
+          });
+        }
+
         return newTrade;
       },
 
@@ -170,7 +182,9 @@ export const useTradeStore = create<TradeState>()(
           }),
         })),
 
-      addExit: (tradeId, exit) =>
+      addExit: (tradeId, exit) => {
+        let firedClose = false;
+        let closedTradeData: { id: string; ticker: string; pnl: number } | null = null;
         set((state) => ({
           trades: state.trades.map((trade) => {
             if (trade.id !== tradeId) return trade;
@@ -183,6 +197,14 @@ export const useTradeStore = create<TradeState>()(
 
             // Auto-close if no shares remaining
             const isClosed = totalShares <= 0;
+            if (isClosed && trade.status !== 'closed') {
+              firedClose = true;
+              closedTradeData = {
+                id: trade.id,
+                ticker: trade.ticker,
+                pnl: realizedPnL,
+              };
+            }
 
             return {
               ...updatedTrade,
@@ -192,7 +214,15 @@ export const useTradeStore = create<TradeState>()(
               closedAt: isClosed ? new Date() : trade.closedAt,
             };
           }),
-        })),
+        }));
+
+        // Fire trade.closed webhook when this exit fully closed the position
+        if (firedClose && closedTradeData && typeof window !== 'undefined') {
+          import('./webhookStore').then(({ fireWebhook }) => {
+            fireWebhook('trade.closed', closedTradeData!);
+          });
+        }
+      },
 
       closeTrade: (id) =>
         set((state) => ({

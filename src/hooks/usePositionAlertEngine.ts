@@ -54,6 +54,16 @@ export function usePositionAlertEngine() {
       const action = kind === 'tp' ? 'TAKE PROFIT' : 'STOP HIT';
       const msg = `${ticker} · ${action} at ${pctMove >= 0 ? '+' : ''}${pctMove.toFixed(2)}% (${currentPrice.toFixed(2)})`;
 
+      // Outbound webhook
+      import('@/store/webhookStore').then(({ fireWebhook }) => {
+        fireWebhook(kind === 'tp' ? 'position.tp' : 'position.sl', {
+          ticker,
+          pctMove,
+          currentPrice,
+          alertKey: key,
+        });
+      });
+
       if (positionAlerts.soundEnabled) {
         if (kind === 'tp') playSellTone();
         else playBuyTone();

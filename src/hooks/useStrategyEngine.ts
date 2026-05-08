@@ -216,6 +216,21 @@ export function useStrategyEngine(opts: {
           continue;
         }
 
+        // Outbound webhook — fire-and-forget, fire-and-forget across all
+        // configured endpoints subscribed to strategy.fired
+        if (typeof window !== 'undefined') {
+          import('@/store/webhookStore').then(({ fireWebhook }) => {
+            fireWebhook('strategy.fired', {
+              strategyId: strategy.id,
+              strategyName: strategy.name,
+              action: action.kind,
+              ticker: action.ticker,
+              shares: action.shares,
+              reason: action.reason,
+            });
+          });
+        }
+
         // Notify the user — works in any mode
         if (action.kind === 'enter') {
           playBuyTone();

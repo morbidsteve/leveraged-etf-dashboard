@@ -74,6 +74,15 @@ export function useAlertRuleEngine() {
           const detail = describeCondition(rule.condition);
           const fire = recordFire(rule.id, ticker, detail);
           if (fire) {
+            // Outbound webhook
+            import('@/store/webhookStore').then(({ fireWebhook }) => {
+              fireWebhook('alert.fired', {
+                ruleId: rule.id,
+                ruleName: rule.name,
+                ticker,
+                detail,
+              });
+            });
             // Notification channels
             if (rule.channels.sound) {
               playBuyTone();
