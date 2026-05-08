@@ -14,6 +14,7 @@ import {
   AlertsPanel,
   SettingsPanel,
   NewTradePanel,
+  OptionsPanel,
 } from '@/components/Panels';
 import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, useAlertEngine, useAlertRuleEngine, useStrategyEngine } from '@/hooks';
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
@@ -63,7 +64,8 @@ type DrawerView =
   | 'strategies'
   | 'backtest'
   | 'journal'
-  | 'monitor';
+  | 'monitor'
+  | 'options';
 
 const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle: string }> = {
   trades: { title: 'Trade History', subtitle: 'All open and closed trades' },
@@ -77,6 +79,7 @@ const DRAWER_TITLES: Record<Exclude<DrawerView, null>, { title: string; subtitle
   backtest: { title: 'Backtest', subtitle: 'Validate a strategy on historical data' },
   journal: { title: 'Trade journal', subtitle: 'Every paper trade with chart-context snapshots' },
   monitor: { title: 'Live monitor', subtitle: 'Real-time state of every (strategy × ticker)' },
+  options: { title: 'Options', subtitle: 'Live chains, IV/Greeks, and multi-leg positions' },
 };
 
 export default function CommandCenterPage() {
@@ -201,7 +204,7 @@ export default function CommandCenterPage() {
     const ALLOWED = [
       'strategies', 'monitor', 'backtest', 'journal',
       'trades', 'analytics', 'scanner',
-      'calculator', 'alerts', 'settings', 'newTrade',
+      'calculator', 'alerts', 'settings', 'newTrade', 'options',
     ];
     if (d && ALLOWED.includes(d)) {
       setDrawer(d as DrawerView);
@@ -744,7 +747,7 @@ export default function CommandCenterPage() {
         onClose={() => setDrawer(null)}
         title={drawerInfo?.title}
         subtitle={drawerInfo?.subtitle}
-        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' || drawer === 'strategies' || drawer === 'backtest' || drawer === 'journal' || drawer === 'monitor' ? 'xl' : 'lg'}
+        size={drawer === 'analytics' || drawer === 'scanner' || drawer === 'trades' || drawer === 'strategies' || drawer === 'backtest' || drawer === 'journal' || drawer === 'monitor' || drawer === 'options' ? 'xl' : 'lg'}
       >
         {drawer === 'strategies' && <StrategiesPanel />}
         {drawer === 'monitor' && <StrategyMonitor />}
@@ -756,6 +759,7 @@ export default function CommandCenterPage() {
         {drawer === 'calculator' && <CalculatorPanel defaultTicker={selectedTicker} />}
         {drawer === 'alerts' && <AlertsPanel />}
         {drawer === 'settings' && <SettingsPanel />}
+        {drawer === 'options' && <OptionsPanel />}
         {drawer === 'newTrade' && (
           <NewTradePanel
             defaultTicker={selectedTicker}

@@ -61,6 +61,7 @@ export default function CommandPalette() {
       { view: 'scanner', label: 'Scanner' },
       { view: 'calculator', label: 'Position calculator' },
       { view: 'alerts', label: 'Alerts & rules' },
+      { view: 'options', label: 'Options chain & positions' },
       { view: 'settings', label: 'Settings' },
       { view: 'newTrade', label: 'New trade' },
     ];
