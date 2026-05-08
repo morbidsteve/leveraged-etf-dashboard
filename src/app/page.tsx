@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { MainLayout, Drawer } from '@/components/Layout';
+import { MainLayout, Drawer, BottomTabBar } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
@@ -699,6 +699,9 @@ export default function CommandCenterPage() {
       <CommandPalette />
       <ShortcutsHelp />
       <ToastHost />
+
+      {/* MOBILE-ONLY BOTTOM TAB BAR */}
+      <BottomTabBar activeDrawer={drawer} />
 
       {/* STRATEGY CONFIRM MODAL — manual_confirm strategies surface here */}
       <StrategyConfirmModal

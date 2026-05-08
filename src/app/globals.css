@@ -299,6 +299,20 @@ body {
 }
 
 @layer utilities {
+  /* iOS safe-area aware bottom padding for the mobile tab bar */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Reserve room above the bottom tab bar so content isn't covered */
+  .pb-tabbar {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+  @media (min-width: 1024px) {
+    .pb-tabbar {
+      padding-bottom: 0;
+    }
+  }
+
   .form-grid-mobile {
     @apply grid gap-4;
     grid-template-columns: 1fr;

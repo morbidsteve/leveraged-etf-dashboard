@@ -87,7 +87,7 @@ export default function MainLayout({
         </h1>
       </div>
 
-      <main className="flex-1 lg:ml-60">
+      <main className="flex-1 lg:ml-60 pb-tabbar">
         <div className={contentClassName ?? 'p-4 pt-18 lg:p-6 lg:pt-6'}>{children}</div>
       </main>
     </div>
