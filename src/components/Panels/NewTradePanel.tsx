@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTradeStore } from '@/store';
 import { usePriceData, useStoreHydration } from '@/hooks';
 import { formatPrice } from '@/lib/calculations';
@@ -21,6 +21,16 @@ export default function NewTradePanel({ defaultTicker = 'SOXL', onCreated }: New
   ]);
   const [notes, setNotes] = useState('');
   const [tags, setTags] = useState('');
+
+  // Cmd+K palette can pre-fill the ticker
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<string>;
+      if (ev.detail) setTicker(ev.detail.toUpperCase());
+    };
+    window.addEventListener('etf-new-trade-ticker', handler);
+    return () => window.removeEventListener('etf-new-trade-ticker', handler);
+  }, []);
 
   const { priceData } = usePriceData({ ticker, refreshInterval: 1000, enabled: storeHydrated });
 

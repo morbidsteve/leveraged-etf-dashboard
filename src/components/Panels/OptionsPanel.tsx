@@ -17,7 +17,8 @@ import {
   OptionInstruction,
   OptionStructure,
 } from '@/types/options';
-import { Tabs, TabPanel, TabDef } from '@/components/UI';
+import { Tabs, TabPanel, TabDef, showToast } from '@/components/UI';
+import { buildTemplate, TemplateId } from '@/lib/options/templates';
 
 const COMMON_OPTIONABLE = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'SPY', 'QQQ', 'NVDA', 'AAPL'];
 
@@ -75,6 +76,43 @@ export default function OptionsPanel() {
       cancelled = true;
     };
   }, [symbol]);
+
+  // Cmd+K palette can deep-link to a specific underlying or pre-build a template
+  useEffect(() => {
+    const symbolHandler = (e: Event) => {
+      const ev = e as CustomEvent<string>;
+      if (ev.detail) setSymbol(ev.detail.toUpperCase());
+    };
+    const templateHandler = (e: Event) => {
+      const ev = e as CustomEvent<{ ticker: string; structure: string }>;
+      if (!ev.detail) return;
+      const targetTicker = ev.detail.ticker.toUpperCase();
+      setSymbol(targetTicker);
+      setActiveTab('strategies');
+      // Wait for the chain to load before resolving the template
+      const tryBuild = (attempts = 0) => {
+        if (attempts > 30) return;
+        if (!chain || chain.underlying !== targetTicker) {
+          setTimeout(() => tryBuild(attempts + 1), 250);
+          return;
+        }
+        const built = buildTemplate(chain, ev.detail.structure as TemplateId, 30, 1);
+        if (built) {
+          setDraft(built.legs);
+          setDraftStructure(built.structure);
+        } else {
+          showToast(`Could not build ${ev.detail.structure} on ${targetTicker}`, 'error', 4000);
+        }
+      };
+      setTimeout(() => tryBuild(0), 200);
+    };
+    window.addEventListener('etf-options-symbol', symbolHandler);
+    window.addEventListener('etf-options-template', templateHandler);
+    return () => {
+      window.removeEventListener('etf-options-symbol', symbolHandler);
+      window.removeEventListener('etf-options-template', templateHandler);
+    };
+  }, [chain]);
 
   return (
     <div className="space-y-4">

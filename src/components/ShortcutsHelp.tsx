@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 const SHORTCUTS: { keys: string[]; desc: string }[] = [
-  { keys: ['⌘', 'K'], desc: 'Open command palette (also Ctrl+K)' },
+  { keys: ['⌘', 'K'], desc: 'Open command palette (universal jump — ~50+ commands)' },
   { keys: ['?'], desc: 'Show this help' },
   { keys: ['/'], desc: 'Focus search' },
   { keys: ['N'], desc: 'New trade' },
@@ -12,6 +12,19 @@ const SHORTCUTS: { keys: string[]; desc: string }[] = [
   { keys: ['Esc'], desc: 'Close drawer / palette / modal' },
   { keys: ['↑', '↓'], desc: 'Navigate palette / lists' },
   { keys: ['↵'], desc: 'Select / confirm' },
+];
+
+const PALETTE_TIPS: { hint: string; example: string }[] = [
+  { hint: 'Type a ticker', example: 'soxl, tqqq, nvda' },
+  { hint: 'Type "open"', example: 'opens any drawer' },
+  { hint: 'Type "build"', example: 'options templates per ticker' },
+  { hint: 'Type "manage"', example: 'manage any open position' },
+  { hint: 'Type "kill"', example: 'kill switch — disable all auto strategies' },
+  { hint: 'Type "settings"', example: 'jump to any settings tab' },
+  { hint: 'Type "chart"', example: 'change interval / range / indicators' },
+  { hint: 'Type "alert"', example: 'toggle position auto-alerts' },
+  { hint: 'Type "refresh"', example: 'force-refresh all live data' },
+  { hint: 'Type "export"', example: 'download a full backup' },
 ];
 
 /**
@@ -66,6 +79,17 @@ export default function ShortcutsHelp() {
                   </kbd>
                 ))}
               </span>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-white/10 px-4 py-3 space-y-1.5">
+          <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">
+            Cmd+K examples
+          </div>
+          {PALETTE_TIPS.map((t) => (
+            <div key={t.hint} className="flex items-center justify-between text-xs">
+              <span className="text-gray-300">{t.hint}</span>
+              <span className="text-gray-500 font-mono">{t.example}</span>
             </div>
           ))}
         </div>

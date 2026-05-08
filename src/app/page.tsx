@@ -226,7 +226,7 @@ export default function CommandCenterPage() {
       const ALLOWED = [
         'strategies', 'monitor', 'backtest', 'journal',
         'trades', 'analytics', 'scanner',
-        'calculator', 'alerts', 'settings', 'newTrade',
+        'calculator', 'alerts', 'settings', 'newTrade', 'options',
       ];
       if (typeof view === 'string' && ALLOWED.includes(view)) {
         setDrawer(view as DrawerView);
@@ -239,12 +239,18 @@ export default function CommandCenterPage() {
       if (ev.detail) setPositionTarget(ev.detail);
     };
     window.addEventListener('etf-open-position-modal', positionHandler);
+    // Cmd+K palette: refresh prices on demand
+    const refreshHandler = () => {
+      refresh();
+    };
+    window.addEventListener('etf-refresh-data', refreshHandler);
     return () => {
       window.removeEventListener('etf-close-drawer', closeHandler);
       window.removeEventListener('etf-open-drawer', openHandler);
       window.removeEventListener('etf-open-position-modal', positionHandler);
+      window.removeEventListener('etf-refresh-data', refreshHandler);
     };
-  }, []);
+  }, [refresh]);
 
   // Pending action awaiting manual confirmation
   const [pendingAction, setPendingAction] = useState<{ action: Action; strategy: Strategy } | null>(null);

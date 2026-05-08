@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSettingsStore, useTradeStore, DEFAULT_SCANNER_SETTINGS } from '@/store';
 import { DEFAULT_RSI_CONFIG } from '@/lib/rsi';
 import { Trade } from '@/types';
@@ -108,6 +108,25 @@ export default function SettingsPanel() {
     }
     return 'broker';
   });
+
+  // Cmd+K palette can deep-link directly into a settings tab.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<string>;
+      const t = ev.detail;
+      if (
+        t === 'broker' || t === 'risk' || t === 'strategy' || t === 'watchlists' ||
+        t === 'scanner' || t === 'data' || t === 'help'
+      ) {
+        setActiveTab(t);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('etf-settings-active-tab', t);
+        }
+      }
+    };
+    window.addEventListener('etf-settings-tab', handler);
+    return () => window.removeEventListener('etf-settings-tab', handler);
+  }, []);
 
   return (
     <div className="space-y-4">
