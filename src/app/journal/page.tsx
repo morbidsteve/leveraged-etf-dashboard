@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePaperStore, useTradeStore, useStrategyStore } from '@/store';
 import { useStoreHydration } from '@/hooks/useHydration';
 import JournalEntryCard from '@/components/Journal/JournalEntryCard';
+import ExportTradesButton from '@/components/ExportTradesButton';
 import { formatCurrency } from '@/lib/calculations';
 
 type Source = 'all' | 'manual' | 'paper';
@@ -119,12 +120,15 @@ export default function JournalPage() {
             Every closed trade with editable notes + tags. The compounding skill.
           </p>
         </div>
-        <Link
-          href="/"
-          className="text-[10px] uppercase tracking-widest font-mono px-2 py-1 rounded border bg-white/[0.03] border-white/10 text-gray-400 hover:text-white"
-        >
-          ← Dashboard
-        </Link>
+        <div className="flex items-center gap-2">
+          <ExportTradesButton />
+          <Link
+            href="/"
+            className="text-[10px] uppercase tracking-widest font-mono px-2 py-1 rounded border bg-white/[0.03] border-white/10 text-gray-400 hover:text-white"
+          >
+            ← Dashboard
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
