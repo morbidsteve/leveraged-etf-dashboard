@@ -219,15 +219,34 @@ export default function StrategyMonitor() {
                     </td>
                     <td className="font-mono text-xs">
                       {r.openShares != null && r.openEntryPrice != null ? (
-                        <>
+                        <div className="flex items-center gap-2">
                           <div>
-                            {r.openShares} @ {formatPrice(r.openEntryPrice)}
+                            <div>
+                              {r.openShares} @ {formatPrice(r.openEntryPrice)}
+                            </div>
+                            <div className={r.openPnL >= 0 ? 'text-profit' : 'text-loss'}>
+                              {r.openPnL >= 0 ? '+' : ''}
+                              {formatCurrency(r.openPnL)}
+                            </div>
                           </div>
-                          <div className={r.openPnL >= 0 ? 'text-profit' : 'text-loss'}>
-                            {r.openPnL >= 0 ? '+' : ''}
-                            {formatCurrency(r.openPnL)}
-                          </div>
-                        </>
+                          <button
+                            onClick={() =>
+                              window.dispatchEvent(
+                                new CustomEvent('etf-open-position-modal', {
+                                  detail: {
+                                    kind: 'paper',
+                                    strategyId: r.strategyId,
+                                    ticker: r.ticker,
+                                  },
+                                })
+                              )
+                            }
+                            className="text-[9px] uppercase tracking-widest text-gray-500 hover:text-white px-1.5 py-0.5 rounded border border-white/10 hover:border-accent/40 transition shrink-0"
+                            title="Close paper position"
+                          >
+                            Close
+                          </button>
+                        </div>
                       ) : (
                         <span className="text-gray-600">—</span>
                       )}

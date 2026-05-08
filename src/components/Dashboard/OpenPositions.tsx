@@ -45,6 +45,7 @@ export default function OpenPositions({ trades, prices }: OpenPositionsProps) {
               <th>P&L</th>
               <th>Target 1.5%</th>
               <th>Target 2%</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -97,6 +98,21 @@ export default function OpenPositions({ trades, prices }: OpenPositionsProps) {
                       end={position.target20}
                     />
                   </td>
+                  <td>
+                    <button
+                      onClick={() =>
+                        window.dispatchEvent(
+                          new CustomEvent('etf-open-position-modal', {
+                            detail: { kind: 'manual', tradeId: trade.id },
+                          })
+                        )
+                      }
+                      className="text-[10px] uppercase tracking-widest text-gray-500 hover:text-white px-2 py-1 rounded border border-white/10 hover:border-accent/40 hover:bg-accent/5 transition"
+                      title="Sell, partial close, or adjust stop"
+                    >
+                      Manage
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -114,12 +130,24 @@ export default function OpenPositions({ trades, prices }: OpenPositionsProps) {
           return (
             <div key={trade.id} className="bg-dark-bg rounded-lg p-4 space-y-3">
               {/* Header with ticker and P&L */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-lg font-bold text-white">{trade.ticker}</span>
                 <div className={`text-right ${isProfit ? 'text-profit' : 'text-loss'}`}>
                   <div className="font-mono font-bold">{formatCurrency(position.unrealizedPnL)}</div>
                   <div className="text-xs">{formatPercent(position.unrealizedPnLPercent)}</div>
                 </div>
+                <button
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent('etf-open-position-modal', {
+                        detail: { kind: 'manual', tradeId: trade.id },
+                      })
+                    )
+                  }
+                  className="text-[10px] uppercase tracking-widest text-gray-500 hover:text-white px-2 py-1 rounded border border-white/10 hover:border-accent/40 transition shrink-0"
+                >
+                  Manage
+                </button>
               </div>
 
               {/* Position details */}

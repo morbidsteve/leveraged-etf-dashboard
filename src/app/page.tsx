@@ -19,6 +19,7 @@ import { usePriceData, useHydration, useStoreHydration, useKeyboardShortcuts, us
 import { AlertToast, NotificationPermissionBadge } from '@/components/Alerts';
 import CommandPalette from '@/components/CommandPalette';
 import ShortcutsHelp from '@/components/ShortcutsHelp';
+import PositionActionModal, { PositionActionTarget } from '@/components/PositionActionModal';
 import { ToastHost } from '@/components/UI';
 import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel, StrategyMonitor } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
@@ -225,14 +226,22 @@ export default function CommandCenterPage() {
       }
     };
     window.addEventListener('etf-open-drawer', openHandler);
+    // Components anywhere can dispatch this to open the position modal
+    const positionHandler = (e: Event) => {
+      const ev = e as CustomEvent<PositionActionTarget>;
+      if (ev.detail) setPositionTarget(ev.detail);
+    };
+    window.addEventListener('etf-open-position-modal', positionHandler);
     return () => {
       window.removeEventListener('etf-close-drawer', closeHandler);
       window.removeEventListener('etf-open-drawer', openHandler);
+      window.removeEventListener('etf-open-position-modal', positionHandler);
     };
   }, []);
 
   // Pending action awaiting manual confirmation
   const [pendingAction, setPendingAction] = useState<{ action: Action; strategy: Strategy } | null>(null);
+  const [positionTarget, setPositionTarget] = useState<PositionActionTarget | null>(null);
 
   // Mount the strategy engine — runs every tick, evaluates enabled strategies,
   // emits paper trades or fires the manual-confirm modal.
@@ -685,7 +694,12 @@ export default function CommandCenterPage() {
               Positions ({trades.filter((t) => t.status === 'open').length})
             </h2>
             <ExposureWarning />
-            <CompactPositions trades={trades} prices={prices} onSelectTicker={setSelectedTicker} />
+            <CompactPositions
+              trades={trades}
+              prices={prices}
+              onSelectTicker={setSelectedTicker}
+              onActionPosition={(tradeId) => setPositionTarget({ kind: 'manual', tradeId })}
+            />
           </div>
           <EarningsWidget tickers={watchlist} />
           <NewsStrip ticker={selectedTicker} />
@@ -699,6 +713,12 @@ export default function CommandCenterPage() {
       <CommandPalette />
       <ShortcutsHelp />
       <ToastHost />
+
+      {/* POSITION ACTION MODAL — close/partial-close/adjust-stop/broker-route */}
+      <PositionActionModal
+        target={positionTarget}
+        onClose={() => setPositionTarget(null)}
+      />
 
       {/* MOBILE-ONLY BOTTOM TAB BAR */}
       <BottomTabBar activeDrawer={drawer} />
@@ -825,10 +845,12 @@ function CompactPositions({
   trades,
   prices,
   onSelectTicker,
+  onActionPosition,
 }: {
   trades: ReturnType<typeof useTradeStore.getState>['trades'];
   prices: Record<string, PriceData>;
   onSelectTicker: (t: string) => void;
+  onActionPosition?: (tradeId: string) => void;
 }) {
   const updateTrade = useTradeStore((s) => s.updateTrade);
   const open = trades.filter((t) => t.status === 'open');
@@ -860,11 +882,13 @@ function CompactPositions({
 
         return (
           <div key={trade.id} className="card glass-hover p-3 space-y-2">
-            <div
-              className="flex items-center justify-between cursor-pointer"
-              onClick={() => onSelectTicker(trade.ticker)}
-            >
-              <span className="font-bold text-white text-sm">{trade.ticker}</span>
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => onSelectTicker(trade.ticker)}
+                className="text-left flex-1 min-w-0"
+              >
+                <span className="font-bold text-white text-sm">{trade.ticker}</span>
+              </button>
               <div className="text-right">
                 <div className={`font-mono text-sm font-bold ${isProfit ? 'text-profit' : 'text-loss'}`}>
                   {isProfit ? '+' : ''}
@@ -874,6 +898,15 @@ function CompactPositions({
                   {formatPercent(pnlPct)}
                 </div>
               </div>
+              {onActionPosition && (
+                <button
+                  onClick={() => onActionPosition(trade.id)}
+                  className="text-[10px] uppercase tracking-widest text-gray-500 hover:text-white px-2 py-1 rounded border border-white/10 hover:border-accent/40 hover:bg-accent/5 transition shrink-0"
+                  title="Sell, partial close, or adjust stop"
+                >
+                  Manage
+                </button>
+              )}
             </div>
             <div className="flex items-center justify-between text-[10px] text-gray-500 font-mono">
               <span>

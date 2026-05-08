@@ -306,12 +306,36 @@ export default function StrategiesPanel() {
                         Open positions
                       </div>
                       {opensForStrat.length > 0 ? (
-                        <div className="font-mono">
-                          {opensForStrat.length} on {opensForStrat.map((p) => p.ticker).join(', ')}
-                          <span className={liveOpenPnL >= 0 ? 'text-profit ml-2' : 'text-loss ml-2'}>
-                            {liveOpenPnL >= 0 ? '+' : ''}
-                            {formatCurrency(liveOpenPnL)}
-                          </span>
+                        <div className="font-mono space-y-1">
+                          <div>
+                            {opensForStrat.length} on {opensForStrat.map((p) => p.ticker).join(', ')}
+                            <span className={liveOpenPnL >= 0 ? 'text-profit ml-2' : 'text-loss ml-2'}>
+                              {liveOpenPnL >= 0 ? '+' : ''}
+                              {formatCurrency(liveOpenPnL)}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {opensForStrat.map((p) => (
+                              <button
+                                key={p.id}
+                                onClick={() =>
+                                  window.dispatchEvent(
+                                    new CustomEvent('etf-open-position-modal', {
+                                      detail: {
+                                        kind: 'paper',
+                                        strategyId: p.strategyId,
+                                        ticker: p.ticker,
+                                      },
+                                    })
+                                  )
+                                }
+                                className="text-[9px] uppercase tracking-widest text-gray-500 hover:text-white px-1.5 py-0.5 rounded border border-white/10 hover:border-accent/40 transition"
+                                title={`Close paper ${p.ticker}`}
+                              >
+                                Close {p.ticker}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       ) : (
                         <div className="text-gray-600">—</div>
