@@ -8,6 +8,7 @@ import { SchwabConnectCard, WorkerStatusPanel } from '@/components/Strategy';
 import { downloadBundle, applyBundle } from '@/lib/exportImport';
 import { Tabs, TabPanel, TabDef } from '@/components/UI';
 import WatchlistManager from './WatchlistManager';
+import TaxToolsCard from './TaxToolsCard';
 
 type SettingsTab = 'broker' | 'risk' | 'strategy' | 'watchlists' | 'scanner' | 'data' | 'help';
 
@@ -534,6 +535,8 @@ export default function SettingsPanel() {
       </TabPanel>
 
       <TabPanel id="data" active={activeTab}>
+      <div className="space-y-4">
+      <TaxToolsCard />
       <div className="card">
         <div className="card-header">
           <h2 className="font-medium text-white">Data management</h2>
@@ -601,6 +604,7 @@ export default function SettingsPanel() {
             </button>
           </div>
         </div>
+      </div>
       </div>
       </TabPanel>
 
