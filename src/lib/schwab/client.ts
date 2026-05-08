@@ -195,6 +195,123 @@ export function buildSellStopOrder(o: SellStopOrder) {
   };
 }
 
+/**
+ * Build a bracket OCO order (TRIGGER strategy): a buy-fills-then-OCO setup
+ * where the buy is the parent and a one-cancels-other pair (target sell limit
+ * + stop loss) is the child. After the buy fills, both children become live;
+ * whichever fires first cancels the other.
+ *
+ * This is the broker-side safety net: if our engine dies between fill and
+ * exit, the broker still manages the trade.
+ */
+export function buildBracketOcoOrder(o: {
+  symbol: string;
+  shares: number;
+  buyLimitPrice: number;
+  targetLimitPrice: number;
+  stopPrice: number;
+  duration?: 'DAY' | 'GOOD_TILL_CANCEL';
+}) {
+  return {
+    orderType: 'LIMIT',
+    session: 'NORMAL',
+    duration: o.duration ?? 'DAY',
+    orderStrategyType: 'TRIGGER',
+    price: Number(o.buyLimitPrice.toFixed(2)),
+    orderLegCollection: [
+      {
+        instruction: 'BUY',
+        quantity: o.shares,
+        instrument: { symbol: o.symbol, assetType: 'EQUITY' },
+      },
+    ],
+    childOrderStrategies: [
+      {
+        orderStrategyType: 'OCO',
+        childOrderStrategies: [
+          {
+            orderType: 'LIMIT',
+            session: 'NORMAL',
+            duration: 'GOOD_TILL_CANCEL',
+            orderStrategyType: 'SINGLE',
+            price: Number(o.targetLimitPrice.toFixed(2)),
+            orderLegCollection: [
+              {
+                instruction: 'SELL',
+                quantity: o.shares,
+                instrument: { symbol: o.symbol, assetType: 'EQUITY' },
+              },
+            ],
+          },
+          {
+            orderType: 'STOP',
+            session: 'NORMAL',
+            duration: 'GOOD_TILL_CANCEL',
+            orderStrategyType: 'SINGLE',
+            stopPrice: Number(o.stopPrice.toFixed(2)),
+            orderLegCollection: [
+              {
+                instruction: 'SELL',
+                quantity: o.shares,
+                instrument: { symbol: o.symbol, assetType: 'EQUITY' },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export interface SchwabOrderStatus {
+  orderId: string;
+  status: string;            // 'WORKING' | 'FILLED' | 'CANCELED' | ...
+  filledQuantity?: number;
+  filledPrice?: number;      // average fill price across legs
+  enteredTime?: string;
+  closeTime?: string;
+}
+
+/**
+ * Fetch the current state of an order. Used to confirm fills + capture
+ * actual fill price (which may differ from the limit price submitted).
+ */
+export async function getOrderStatus(hash: string, orderId: string): Promise<SchwabOrderStatus> {
+  const raw = (await call(`/accounts/${encodeURIComponent(hash)}/orders/${orderId}`)) as {
+    orderId: string | number;
+    status: string;
+    filledQuantity?: number;
+    enteredTime?: string;
+    closeTime?: string;
+    orderActivityCollection?: Array<{
+      executionLegs?: Array<{
+        quantity?: number;
+        price?: number;
+      }>;
+    }>;
+  };
+  // Compute weighted average fill price across all execution legs
+  let totalQ = 0;
+  let totalQP = 0;
+  for (const act of raw.orderActivityCollection ?? []) {
+    for (const leg of act.executionLegs ?? []) {
+      const q = leg.quantity ?? 0;
+      const p = leg.price ?? 0;
+      totalQ += q;
+      totalQP += q * p;
+    }
+  }
+  const filledPrice = totalQ > 0 ? totalQP / totalQ : undefined;
+  return {
+    orderId: String(raw.orderId),
+    status: raw.status,
+    filledQuantity: raw.filledQuantity,
+    filledPrice,
+    enteredTime: raw.enteredTime,
+    closeTime: raw.closeTime,
+  };
+}
+
 /** Submit a built order JSON to Schwab. Returns the orderId from the Location header. */
 export async function placeOrder(hash: string, orderJson: unknown): Promise<string | null> {
   const token = await getAccessToken();

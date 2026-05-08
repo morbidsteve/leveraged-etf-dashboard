@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import OrderAuditView from './OrderAuditView';
 
 interface SchwabStatus {
   connected: boolean;
@@ -238,6 +239,11 @@ SCHWAB_TOKEN_ENCRYPTION_KEY=<32+ random chars; openssl rand -hex 32>`}
           <button onClick={handleDisconnect} className="btn btn-ghost text-sm">
             Disconnect
           </button>
+        </div>
+
+        {/* Audit log of recent broker decisions */}
+        <div className="pt-3 border-t border-white/5">
+          <OrderAuditView />
         </div>
       </div>
     </div>

@@ -9,3 +9,4 @@ export { default as JournalPanel } from './JournalPanel';
 export { default as StrategyMonitor } from './StrategyMonitor';
 export { default as StrategyWizard } from './StrategyWizard';
 export { default as ConditionLiveBadge } from './ConditionLiveBadge';
+export { default as OrderAuditView } from './OrderAuditView';
