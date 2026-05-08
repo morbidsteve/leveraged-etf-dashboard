@@ -4,6 +4,8 @@ import { useMemo } from 'react';
 import { QuickStats } from '@/components/Dashboard';
 import { useTradeStore, usePriceStore } from '@/store';
 import StrategyRollup from './StrategyRollup';
+import PerformanceAttribution from './PerformanceAttribution';
+import Notebook from '@/components/Notebook';
 import { useStoreHydration } from '@/hooks';
 import {
   calculatePortfolioSummary,
@@ -200,6 +202,8 @@ export default function AnalyticsPanel() {
   return (
     <div className="space-y-6">
       <StrategyRollup />
+      <PerformanceAttribution />
+      <Notebook />
 
       <QuickStats summary={portfolioSummary} />
 
