@@ -20,6 +20,7 @@ import StrategyWizard from './StrategyWizard';
 import ConditionLiveBadge from './ConditionLiveBadge';
 import EntryFireStrip from './EntryFireStrip';
 import ConditionTreeView from './ConditionTreeView';
+import StrategyExplainerCard from './StrategyExplainerCard';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
 
@@ -415,6 +416,8 @@ function StrategyDetail({
   const [showTreeView, setShowTreeView] = useState(false);
   return (
     <div className="pt-3 border-t border-white/5 space-y-3 text-xs">
+      <StrategyExplainerCard strategy={strategy} />
+
       <Field label={`Tickers (${strategy.tickers.length})`}>
         <TickersPicker
           value={strategy.tickers}
