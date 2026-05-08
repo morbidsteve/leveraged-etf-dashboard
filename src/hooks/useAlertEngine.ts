@@ -1,7 +1,14 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { usePriceStore, useAlertStore, useSettingsStore } from '@/store';
+import { useEffect, useMemo, useRef } from 'react';
+import {
+  usePriceStore,
+  useAlertStore,
+  useSettingsStore,
+  useTradeStore,
+  usePaperStore,
+  useOptionsStore,
+} from '@/store';
 import { detectCrossings, isWithinCooldown } from '@/lib/alertEngine';
 import { playBuyTone, playSellTone } from '@/lib/sound';
 import { fireNotification } from '@/lib/notify';
@@ -24,6 +31,23 @@ export function useAlertEngine() {
   // Track previous RSI value per ticker — required for crossing detection
   const prevRSI = useRef<Record<string, number | null>>({});
 
+  // Tickers the user actually holds — equity (open) + paper + options.
+  // Used to gate SELL alerts (don't notify "sell SOXL" if you don't own it).
+  const trades = useTradeStore((s) => s.trades);
+  const paperOpen = usePaperStore((s) => s.open);
+  const optionsPositions = useOptionsStore((s) => s.positions);
+  const heldTickers = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of trades) {
+      if (t.status === 'open') set.add(t.ticker.toUpperCase());
+    }
+    for (const p of paperOpen) set.add(p.ticker.toUpperCase());
+    for (const op of optionsPositions) {
+      if (!op.closedAt) set.add(op.underlying.toUpperCase());
+    }
+    return set;
+  }, [trades, paperOpen, optionsPositions]);
+
   useEffect(() => {
     if (!alertSettings.enabled) {
       // Reset baseline when disabled so we don't fire stale crossings on re-enable
@@ -44,6 +68,13 @@ export function useAlertEngine() {
       if (prev !== null && curr !== null && prev !== curr) {
         const crossings = detectCrossings(ticker, prev, curr, rsiConfig);
         for (const c of crossings) {
+          // Gate SELL signals to held positions only — a "sell SOXL" alert
+          // is noise if the user has no SOXL exposure. BUY signals always
+          // fire (they're opportunities, useful even without a position).
+          if (c.type === 'rsi_overbought' && !heldTickers.has(ticker.toUpperCase())) {
+            continue;
+          }
+
           if (
             isWithinCooldown(
               ticker,
@@ -81,5 +112,5 @@ export function useAlertEngine() {
     }
     // We deliberately depend on rsiData identity changes — Zustand returns a new
     // object reference on every set, so this fires once per tick.
-  }, [rsiData, rsiConfig, alertSettings, recentAlerts, addAlert]);
+  }, [rsiData, rsiConfig, alertSettings, recentAlerts, addAlert, heldTickers]);
 }

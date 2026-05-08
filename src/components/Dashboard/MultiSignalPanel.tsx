@@ -1,7 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
-import { usePriceStore, useSettingsStore } from '@/store';
+import {
+  usePriceStore,
+  useSettingsStore,
+  useTradeStore,
+  usePaperStore,
+  useOptionsStore,
+} from '@/store';
 import { getRSIStatus } from '@/lib/rsi';
 import { calculateRSI } from '@/lib/rsi';
 
@@ -25,6 +31,23 @@ export default function MultiSignalPanel({
   const selectedTicker = usePriceStore((s) => s.selectedTicker);
   const rsiConfig = useSettingsStore((s) => s.settings.rsiConfig);
   const watchlist = useSettingsStore((s) => s.settings.watchlist) ?? [];
+  const trades = useTradeStore((s) => s.trades);
+  const paperOpen = usePaperStore((s) => s.open);
+  const optionsPositions = useOptionsStore((s) => s.positions);
+
+  // Tickers the user actually has exposure to right now — equity trades
+  // (open) + paper positions + options positions (not closed).
+  const positionTickers = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of trades) {
+      if (t.status === 'open') set.add(t.ticker.toUpperCase());
+    }
+    for (const p of paperOpen) set.add(p.ticker.toUpperCase());
+    for (const op of optionsPositions) {
+      if (!op.closedAt) set.add(op.underlying.toUpperCase());
+    }
+    return set;
+  }, [trades, paperOpen, optionsPositions]);
 
   const items = useMemo(() => {
     return watchlist.map((ticker) => {
@@ -39,15 +62,24 @@ export default function MultiSignalPanel({
           status = getRSIStatus(rsiValue, rsiConfig);
         }
       }
+      // Sell signals only matter when the user actually holds a position.
+      // If they don't, downgrade to neutral so the row stays visible but
+      // doesn't suggest action they can't take. Buy signals always show
+      // (opportunities are useful even without a position yet).
+      const hasPosition = positionTickers.has(ticker.toUpperCase());
+      if (status === 'sell' && !hasPosition) {
+        status = 'neutral';
+      }
       return {
         ticker,
         rsiValue,
         status,
         price: tickerPrice?.price,
         change: tickerPrice?.changePercent,
+        hasPosition,
       };
     });
-  }, [watchlist, candles, prices, rsiConfig]);
+  }, [watchlist, candles, prices, rsiConfig, positionTickers]);
 
   // Sort: selected first, then BUY > SELL > NEUTRAL, then by ticker name
   const sorted = useMemo(() => {
@@ -104,6 +136,7 @@ function SignalRow({
   price,
   change,
   isSelected,
+  hasPosition,
   onClick,
 }: {
   ticker: string;
@@ -112,6 +145,7 @@ function SignalRow({
   price?: number;
   change?: number;
   isSelected: boolean;
+  hasPosition?: boolean;
   onClick: () => void;
 }) {
   const statusColor =
@@ -144,6 +178,14 @@ function SignalRow({
         }`}
       >
         {ticker}
+        {hasPosition && (
+          <span
+            className="ml-1 text-[8px] uppercase tracking-widest font-mono text-accent-light/70"
+            title="You have an open position in this ticker"
+          >
+            ●
+          </span>
+        )}
       </span>
       <span className="text-[10px] font-mono text-gray-400 ml-auto">
         {rsiValue != null ? rsiValue.toFixed(1) : '—'}
