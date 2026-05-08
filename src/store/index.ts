@@ -6,6 +6,7 @@ export { usePaperStore } from './paperStore';
 export type { PaperEntry, PaperTrade, TradeSnapshot } from './paperStore';
 export { useAlertRuleStore } from './alertRuleStore';
 export type { AlertRule, AlertRuleFire } from './alertRuleStore';
+export { useOptionsStore, computeStructureRisk } from './optionsStore';
 import {
   Trade,
   TradeEntry,

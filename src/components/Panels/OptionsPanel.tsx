@@ -2,45 +2,72 @@
 
 import { useEffect, useState } from 'react';
 import { useSettingsStore, usePriceStore } from '@/store';
-import { OptionChainViewer, VolPanel } from '@/components/Options';
-import { OptionChain, OptionContract } from '@/types/options';
+import {
+  OptionChainViewer,
+  VolPanel,
+  OrderTicket,
+  StrategyBuilder,
+  PositionList,
+} from '@/components/Options';
+import {
+  OptionChain,
+  OptionContract,
+  OptionInstruction,
+  OptionStructure,
+} from '@/types/options';
+import { Tabs, TabPanel, TabDef } from '@/components/UI';
 
 const COMMON_OPTIONABLE = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'SPY', 'QQQ', 'NVDA', 'AAPL'];
 
+type DraftLeg = {
+  contract: OptionContract;
+  instruction: OptionInstruction;
+  quantity: number;
+};
+
+type Tab = 'chain' | 'positions' | 'strategies';
+const TABS: TabDef<Tab>[] = [
+  { id: 'chain', label: 'Chain' },
+  { id: 'positions', label: 'Positions' },
+  { id: 'strategies', label: 'Templates' },
+];
+
 /**
  * Options drawer — top-level container for all options-trading
- * surfaces. For Phase 1, hosts the chain viewer + IV/vol panel.
+ * surfaces. Three tabs: Chain (raw chain + IV/vol), Positions (open +
+ * closed), Templates (one-click multi-leg setups).
  *
- * Future phases bolt on additional sub-views (positions, multi-leg
- * builder, options strategies). Designed so each sub-view is a card
- * that can be progressively added without restructuring.
+ * Picks up an active draft (legs to put in the order ticket) from the
+ * chain or templates flow.
  */
 export default function OptionsPanel() {
   const selectedTicker = usePriceStore((s) => s.selectedTicker);
   const settings = useSettingsStore((s) => s.settings);
   const [symbol, setSymbol] = useState(selectedTicker || 'SOXL');
-  const [chainCache, setChainCache] = useState<OptionChain | null>(null);
-  const [, setSelectedContract] = useState<OptionContract | null>(null);
+  const [chain, setChain] = useState<OptionChain | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>('chain');
+
+  // Order ticket state
+  const [draft, setDraft] = useState<DraftLeg[]>([]);
+  const [draftStructure, setDraftStructure] = useState<OptionStructure>('single');
 
   const tickers = settings.watchlist ?? [];
 
-  // Fetch the chain once at the panel level so the VolPanel and the
-  // OptionChainViewer can share state. The viewer also fetches its own
-  // copy currently — refactor to a shared hook in a follow-up.
+  // Single source-of-truth chain fetch — viewers + builder both consume.
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/options/chain?symbol=${encodeURIComponent(symbol)}`)
       .then((r) => r.json())
       .then((data: OptionChain) => {
         if (cancelled) return;
-        setChainCache({
+        setChain({
           ...data,
           fetchedAt: new Date(data.fetchedAt as unknown as string),
         });
       })
       .catch(() => {
         if (cancelled) return;
-        setChainCache(null);
+        setChain(null);
       });
     return () => {
       cancelled = true;
@@ -70,20 +97,43 @@ export default function OptionsPanel() {
         </div>
       </div>
 
-      <p className="text-xs text-gray-500">
-        Live options chain via Schwab. Click a contract to populate the
-        order ticket (coming in Phase 2). Chains are cached 30s upstream.
-      </p>
+      <Tabs<Tab> tabs={TABS} active={activeTab} onChange={setActiveTab} variant="underline" />
 
-      <VolPanel chain={chainCache} />
+      <TabPanel id="chain" active={activeTab}>
+        <div className="space-y-4">
+          <VolPanel chain={chain} />
+          <OptionChainViewer
+            symbol={symbol}
+            onSelectContract={(c) => {
+              setDraft([{ contract: c, instruction: 'BUY_TO_OPEN', quantity: 1 }]);
+              setDraftStructure('single');
+            }}
+          />
+        </div>
+      </TabPanel>
 
-      <OptionChainViewer
-        symbol={symbol}
-        onSelectContract={(c) => {
-          setSelectedContract(c);
-          // Phase 2 will route this to the order ticket
-        }}
-      />
+      <TabPanel id="positions" active={activeTab}>
+        <PositionList />
+      </TabPanel>
+
+      <TabPanel id="strategies" active={activeTab}>
+        <StrategyBuilder
+          chain={chain}
+          onSelectStructure={(legs, structure) => {
+            setDraft(legs);
+            setDraftStructure(structure);
+          }}
+        />
+      </TabPanel>
+
+      {draft.length > 0 && (
+        <OrderTicket
+          draft={draft}
+          structure={draftStructure}
+          underlying={symbol}
+          onClose={() => setDraft([])}
+        />
+      )}
     </div>
   );
 }
