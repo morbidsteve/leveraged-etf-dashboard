@@ -298,3 +298,65 @@ function csvEscape(s: string): string {
   }
   return s;
 }
+
+// ── Tax-loss harvesting ───────────────────────────────────────────────
+
+export interface HarvestSuggestion {
+  ticker: string;
+  shares: number;
+  avgCost: number;
+  currentPrice: number;
+  unrealizedLoss: number;
+  daysHeld: number;
+  longTerm: boolean;
+  recommended: boolean;
+  reason: string;
+  warnings: string[];
+}
+
+export function suggestHarvest(opts: {
+  trades: Trade[];
+  prices: Record<string, { price: number }>;
+  minLoss?: number;
+  longTermOnly?: boolean;
+}): HarvestSuggestion[] {
+  const { trades, prices, minLoss = 200, longTermOnly = false } = opts;
+  const out: HarvestSuggestion[] = [];
+
+  for (const t of trades) {
+    if (t.status !== 'open' || t.totalShares <= 0) continue;
+    const live = prices[t.ticker]?.price;
+    if (!live || !t.avgCost) continue;
+    const unrealized = (live - t.avgCost) * t.totalShares;
+    if (unrealized >= 0) continue;
+    const daysHeld = (Date.now() - new Date(t.createdAt).getTime()) / 86400_000;
+    const longTerm = daysHeld > 365;
+    if (longTermOnly && !longTerm) continue;
+    if (Math.abs(unrealized) < minLoss) continue;
+
+    const warnings: string[] = [];
+    const cutoff = new Date(Date.now() - 30 * 86400_000);
+    const recentBuy = t.entries.some((e) => new Date(e.date) > cutoff);
+    if (recentBuy) {
+      warnings.push('You bought this within the past 30 days — selling at a loss now triggers §1091 wash-sale.');
+    }
+
+    const recommended = !recentBuy && Math.abs(unrealized) >= minLoss;
+
+    out.push({
+      ticker: t.ticker,
+      shares: t.totalShares,
+      avgCost: t.avgCost,
+      currentPrice: live,
+      unrealizedLoss: unrealized,
+      daysHeld,
+      longTerm,
+      recommended,
+      reason: longTerm
+        ? `Long-term loss of ${unrealized.toFixed(2)} — offsets short-term and long-term gains.`
+        : `Short-term loss of ${unrealized.toFixed(2)} — offsets short-term gains first.`,
+      warnings,
+    });
+  }
+  return out.sort((a, b) => a.unrealizedLoss - b.unrealizedLoss);
+}

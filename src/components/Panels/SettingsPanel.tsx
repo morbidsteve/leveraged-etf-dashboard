@@ -9,6 +9,7 @@ import { downloadBundle, applyBundle } from '@/lib/exportImport';
 import { Tabs, TabPanel, TabDef } from '@/components/UI';
 import WatchlistManager from './WatchlistManager';
 import TaxToolsCard from './TaxToolsCard';
+import TaxHarvestCard from './TaxHarvestCard';
 import ApiKeysCard from './ApiKeysCard';
 import WebhooksCard from './WebhooksCard';
 import EngineDiagnosticsCard from './EngineDiagnosticsCard';
@@ -595,6 +596,7 @@ export default function SettingsPanel() {
       <TabPanel id="data" active={activeTab}>
       <div className="space-y-4">
       <TaxToolsCard />
+      <TaxHarvestCard />
       <div className="card">
         <div className="card-header">
           <h2 className="font-medium text-white">Data management</h2>
