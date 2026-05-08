@@ -8,6 +8,7 @@ import { CandlestickChart } from '@/components/Chart';
 import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel, InsiderActivityCard, RegimeChip, HealthBadge, CorrelationCard, EconCalendarBanner, DailySummaryCard, VolatilityCard } from '@/components/Dashboard';
 import { TimeAndSales } from '@/components/Tape';
 import VoiceCommandButton from '@/components/VoiceCommandButton';
+import ATRStopSuggestion from '@/components/Position/ATRStopSuggestion';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -1043,6 +1044,13 @@ function CompactPositions({
                 </span>
               )}
             </div>
+            <ATRStopSuggestion
+              ticker={trade.ticker}
+              entryPrice={trade.avgCost}
+              side="long"
+              multiplier={1.5}
+              onApply={(price) => updateTrade(trade.id, { stopPrice: price })}
+            />
           </div>
         );
       })}
