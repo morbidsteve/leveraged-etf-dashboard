@@ -208,6 +208,13 @@ export default function TradesPanel({ onSelectTrade }: TradesPanelProps) {
                       : 0;
                   const isProfit = pnl >= 0;
                   const holdTime = calculateHoldTime(trade);
+                  // Original shares (sum of entries) — totalShares decrements
+                  // on each exit and is 0 once fully closed, so we can't use
+                  // it as the cost-basis denominator.
+                  const originalShares = trade.entries.reduce((s, e) => s + e.shares, 0);
+                  const costBasis = trade.avgCost * originalShares;
+                  const sharesDisplay =
+                    trade.status === 'closed' ? originalShares : trade.totalShares;
 
                   return (
                     <tr key={trade.id}>
@@ -224,7 +231,7 @@ export default function TradesPanel({ onSelectTrade }: TradesPanelProps) {
                           {trade.status}
                         </span>
                       </td>
-                      <td className="font-mono">{formatShares(trade.totalShares)}</td>
+                      <td className="font-mono">{formatShares(sharesDisplay)}</td>
                       <td className="font-mono">{formatPrice(trade.avgCost)}</td>
                       <td className="font-mono">
                         {trade.status === 'closed'
@@ -242,9 +249,9 @@ export default function TradesPanel({ onSelectTrade }: TradesPanelProps) {
                         className={`font-mono ${isProfit ? 'text-profit' : 'text-loss'}`}
                       >
                         <div>{formatCurrency(pnl)}</div>
-                        {trade.avgCost > 0 && (
+                        {costBasis > 0 && (
                           <div className="text-xs">
-                            {formatPercent((pnl / (trade.avgCost * trade.totalShares)) * 100)}
+                            {formatPercent((pnl / costBasis) * 100)}
                           </div>
                         )}
                       </td>
@@ -295,6 +302,9 @@ export default function TradesPanel({ onSelectTrade }: TradesPanelProps) {
                 : currentPrice
                 ? (currentPrice - trade.avgCost) * trade.totalShares
                 : 0;
+            const originalShares = trade.entries.reduce((s, e) => s + e.shares, 0);
+            const sharesDisplay =
+              trade.status === 'closed' ? originalShares : trade.totalShares;
             const isProfit = pnl >= 0;
             return (
               <div key={trade.id} className="card p-4 space-y-3">
@@ -316,7 +326,7 @@ export default function TradesPanel({ onSelectTrade }: TradesPanelProps) {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <div className="text-[10px] text-gray-500 uppercase">Shares</div>
-                    <div className="font-mono">{formatShares(trade.totalShares)}</div>
+                    <div className="font-mono">{formatShares(sharesDisplay)}</div>
                   </div>
                   <div>
                     <div className="text-[10px] text-gray-500 uppercase">Avg Cost</div>
