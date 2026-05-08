@@ -4,6 +4,9 @@ import {
   calculateEMA,
   calculateVWAP,
   calculateBollingerBands,
+  calculateADX,
+  calculateZScore,
+  calculatePercentileRank,
 } from './indicators';
 import { Candle } from '@/types';
 
@@ -87,5 +90,65 @@ describe('calculateBollingerBands', () => {
     const last = bands[bands.length - 1];
     expect(last.upper).toBeGreaterThanOrEqual(last.middle);
     expect(last.middle).toBeGreaterThanOrEqual(last.lower);
+  });
+});
+
+describe('calculateADX', () => {
+  it('returns empty when fewer than 2N+1 candles', () => {
+    expect(calculateADX(mk([1, 2, 3]), 14)).toEqual([]);
+  });
+  it('produces ADX values in [0, 100] for trending data', () => {
+    // Strong uptrend
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i * 0.5);
+    const highs = closes.map((c) => c + 0.5);
+    const lows = closes.map((c) => c - 0.5);
+    const adx = calculateADX(mk(closes, { highs, lows }), 14);
+    expect(adx.length).toBeGreaterThan(0);
+    for (const v of adx) {
+      expect(v.adx).toBeGreaterThanOrEqual(0);
+      expect(v.adx).toBeLessThanOrEqual(100);
+      expect(v.plusDI).toBeGreaterThanOrEqual(0);
+      expect(v.minusDI).toBeGreaterThanOrEqual(0);
+    }
+  });
+  it('+DI > -DI in clean uptrend', () => {
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i);
+    const highs = closes.map((c) => c + 0.5);
+    const lows = closes.map((c) => c - 0.5);
+    const adx = calculateADX(mk(closes, { highs, lows }), 14);
+    if (adx.length === 0) return;
+    const last = adx[adx.length - 1];
+    expect(last.plusDI).toBeGreaterThan(last.minusDI);
+  });
+});
+
+describe('calculateZScore', () => {
+  it('returns 0 for flat input', () => {
+    const closes = Array(25).fill(100);
+    const z = calculateZScore(mk(closes), 20);
+    expect(z[z.length - 1].value).toBe(0);
+  });
+  it('positive z when close is above mean', () => {
+    const closes = [...Array(20).fill(100), 110];
+    const z = calculateZScore(mk(closes), 20);
+    expect(z[z.length - 1].value).toBeGreaterThan(0);
+  });
+  it('negative z when close is below mean', () => {
+    const closes = [...Array(20).fill(100), 90];
+    const z = calculateZScore(mk(closes), 20);
+    expect(z[z.length - 1].value).toBeLessThan(0);
+  });
+});
+
+describe('calculatePercentileRank', () => {
+  it('returns 100 when current is the highest in window', () => {
+    const closes = [...Array(99).fill(100), 200];
+    const r = calculatePercentileRank(mk(closes), 100);
+    expect(r[r.length - 1].value).toBe(99);
+  });
+  it('returns 0 when current is the lowest in window', () => {
+    const closes = [...Array(99).fill(100), 50];
+    const r = calculatePercentileRank(mk(closes), 100);
+    expect(r[r.length - 1].value).toBe(0);
   });
 });

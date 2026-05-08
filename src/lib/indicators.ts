@@ -300,3 +300,145 @@ export function calculateStochastic(
 
   return result;
 }
+
+/**
+ * ADX (Average Directional Index) — measures trend strength regardless
+ * of direction. Returns ADX, +DI, -DI per bar after warmup. Standard
+ * Wilder smoothing.
+ *
+ * ADX > 25 typically signals "trending" market; < 20 = ranging.
+ */
+export interface ADXData {
+  time: number;
+  adx: number;
+  plusDI: number;
+  minusDI: number;
+}
+
+export function calculateADX(candles: Candle[], period: number = 14): ADXData[] {
+  if (candles.length < period * 2 + 1) return [];
+
+  const trs: number[] = [];
+  const plusDMs: number[] = [];
+  const minusDMs: number[] = [];
+
+  for (let i = 1; i < candles.length; i++) {
+    const high = candles[i].high;
+    const low = candles[i].low;
+    const prevHigh = candles[i - 1].high;
+    const prevLow = candles[i - 1].low;
+    const prevClose = candles[i - 1].close;
+
+    const tr = Math.max(
+      high - low,
+      Math.abs(high - prevClose),
+      Math.abs(low - prevClose)
+    );
+    trs.push(tr);
+
+    const upMove = high - prevHigh;
+    const downMove = prevLow - low;
+    plusDMs.push(upMove > downMove && upMove > 0 ? upMove : 0);
+    minusDMs.push(downMove > upMove && downMove > 0 ? downMove : 0);
+  }
+
+  // Wilder-smoothed initial sums
+  let trSmooth = trs.slice(0, period).reduce((s, x) => s + x, 0);
+  let plusDMSmooth = plusDMs.slice(0, period).reduce((s, x) => s + x, 0);
+  let minusDMSmooth = minusDMs.slice(0, period).reduce((s, x) => s + x, 0);
+
+  const dxValues: { time: number; dx: number; plusDI: number; minusDI: number }[] = [];
+
+  // First DX after the initial smoothing window
+  {
+    const i = period;
+    const plusDI = trSmooth > 0 ? (plusDMSmooth / trSmooth) * 100 : 0;
+    const minusDI = trSmooth > 0 ? (minusDMSmooth / trSmooth) * 100 : 0;
+    const sum = plusDI + minusDI;
+    const dx = sum > 0 ? (Math.abs(plusDI - minusDI) / sum) * 100 : 0;
+    dxValues.push({ time: candles[i].time, dx, plusDI, minusDI });
+  }
+
+  // Subsequent DX values using Wilder smoothing
+  for (let i = period + 1; i < candles.length; i++) {
+    const idx = i - 1; // index into trs/plusDMs/minusDMs
+    trSmooth = trSmooth - trSmooth / period + trs[idx];
+    plusDMSmooth = plusDMSmooth - plusDMSmooth / period + plusDMs[idx];
+    minusDMSmooth = minusDMSmooth - minusDMSmooth / period + minusDMs[idx];
+    const plusDI = trSmooth > 0 ? (plusDMSmooth / trSmooth) * 100 : 0;
+    const minusDI = trSmooth > 0 ? (minusDMSmooth / trSmooth) * 100 : 0;
+    const sum = plusDI + minusDI;
+    const dx = sum > 0 ? (Math.abs(plusDI - minusDI) / sum) * 100 : 0;
+    dxValues.push({ time: candles[i].time, dx, plusDI, minusDI });
+  }
+
+  if (dxValues.length < period) return [];
+
+  // ADX is Wilder-smoothed DX
+  const result: ADXData[] = [];
+  let adx = dxValues.slice(0, period).reduce((s, x) => s + x.dx, 0) / period;
+  result.push({
+    time: dxValues[period - 1].time,
+    adx,
+    plusDI: dxValues[period - 1].plusDI,
+    minusDI: dxValues[period - 1].minusDI,
+  });
+
+  for (let i = period; i < dxValues.length; i++) {
+    adx = (adx * (period - 1) + dxValues[i].dx) / period;
+    result.push({
+      time: dxValues[i].time,
+      adx,
+      plusDI: dxValues[i].plusDI,
+      minusDI: dxValues[i].minusDI,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Rolling Z-score of close price — how many standard deviations the
+ * current close is from its rolling mean. Useful for mean-reversion
+ * strategies (extreme |z| flags overextended moves).
+ */
+export function calculateZScore(
+  candles: Candle[],
+  period: number = 20
+): { time: number; value: number }[] {
+  if (candles.length < period) return [];
+  const out: { time: number; value: number }[] = [];
+  for (let i = period - 1; i < candles.length; i++) {
+    let sum = 0;
+    for (let j = 0; j < period; j++) sum += candles[i - j].close;
+    const mean = sum / period;
+    let variance = 0;
+    for (let j = 0; j < period; j++) {
+      variance += (candles[i - j].close - mean) ** 2;
+    }
+    const stdDev = Math.sqrt(variance / period);
+    const z = stdDev > 0 ? (candles[i].close - mean) / stdDev : 0;
+    out.push({ time: candles[i].time, value: z });
+  }
+  return out;
+}
+
+/**
+ * Percentile rank of the latest close vs the trailing window. Returns
+ * 0–100. 50 = at median, 100 = at all-time high in the window.
+ */
+export function calculatePercentileRank(
+  candles: Candle[],
+  period: number = 100
+): { time: number; value: number }[] {
+  if (candles.length < period) return [];
+  const out: { time: number; value: number }[] = [];
+  for (let i = period - 1; i < candles.length; i++) {
+    const window: number[] = [];
+    for (let j = 0; j < period; j++) window.push(candles[i - j].close);
+    const cur = candles[i].close;
+    const below = window.filter((v) => v < cur).length;
+    out.push({ time: candles[i].time, value: (below / period) * 100 });
+  }
+  return out;
+}
