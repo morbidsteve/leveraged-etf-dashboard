@@ -5,7 +5,7 @@ import { MainLayout, Drawer, BottomTabBar } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel, InsiderActivityCard, RegimeChip, HealthBadge, CorrelationCard } from '@/components/Dashboard';
+import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget, MultiSignalPanel, InsiderActivityCard, RegimeChip, HealthBadge, CorrelationCard, EconCalendarBanner } from '@/components/Dashboard';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -433,6 +433,11 @@ export default function CommandCenterPage() {
           onOpenBacktest={() => setDrawer('backtest')}
           onOpenSettings={() => setDrawer('settings')}
         />
+      </div>
+
+      {/* ECON CALENDAR BANNER */}
+      <div className="px-4 lg:px-6 pt-4">
+        <EconCalendarBanner />
       </div>
 
       {/* SIGNAL RADAR */}
