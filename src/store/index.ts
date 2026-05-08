@@ -9,6 +9,8 @@ export type { AlertRule, AlertRuleFire } from './alertRuleStore';
 export { useOptionsStore, computeStructureRisk } from './optionsStore';
 export { useWebhookStore, fireWebhook } from './webhookStore';
 export type { WebhookEvent, WebhookEndpoint } from './webhookStore';
+export { useLayoutStore } from './layoutStore';
+export type { LayoutView } from './layoutStore';
 import {
   Trade,
   TradeEntry,

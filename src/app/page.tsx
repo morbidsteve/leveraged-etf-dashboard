@@ -22,6 +22,7 @@ import CommandPalette from '@/components/CommandPalette';
 import ShortcutsHelp from '@/components/ShortcutsHelp';
 import PositionActionModal, { PositionActionTarget } from '@/components/PositionActionModal';
 import ThemeManager from '@/components/ThemeManager';
+import LayoutSwitcher from '@/components/LayoutSwitcher';
 import { ToastHost } from '@/components/UI';
 import { StrategyConfirmModal, StrategiesPanel, BacktestPanel, KillSwitch, JournalPanel, StrategyMonitor } from '@/components/Strategy';
 import { Action, Strategy } from '@/types/strategy';
@@ -434,13 +435,16 @@ export default function CommandCenterPage() {
 
       {/* SIGNAL RADAR */}
       <div className="px-4 lg:px-6 pt-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 gap-2">
           <h2 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
             Signal radar · all watchlist
           </h2>
-          <span className="text-[10px] text-gray-600 uppercase tracking-widest">
-            BUY/SELL float to top
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-600 uppercase tracking-widest hidden sm:inline">
+              BUY/SELL float to top
+            </span>
+            <LayoutSwitcher />
+          </div>
         </div>
         <SignalRadar
           items={radarItems}
