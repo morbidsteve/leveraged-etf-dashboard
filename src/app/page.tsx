@@ -5,7 +5,7 @@ import { MainLayout, Drawer } from '@/components/Layout';
 import { PriceDisplay } from '@/components/Price';
 import { RSIGauge } from '@/components/RSI';
 import { CandlestickChart } from '@/components/Chart';
-import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard } from '@/components/Dashboard';
+import { OpenPositions, SignalRadar, GuardrailIndicator, ExposureWarning, WelcomeCard, NewsStrip, EarningsWidget } from '@/components/Dashboard';
 import {
   TradesPanel,
   AnalyticsPanel,
@@ -678,13 +678,17 @@ export default function CommandCenterPage() {
           </div>
         </section>
 
-        {/* RIGHT RAIL - Open Positions */}
-        <aside className="col-span-12 lg:col-span-3 xl:col-span-3">
-          <h2 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
-            Positions ({trades.filter((t) => t.status === 'open').length})
-          </h2>
-          <ExposureWarning />
-          <CompactPositions trades={trades} prices={prices} onSelectTicker={setSelectedTicker} />
+        {/* RIGHT RAIL - Open Positions + News + Earnings */}
+        <aside className="col-span-12 lg:col-span-3 xl:col-span-3 space-y-4">
+          <div>
+            <h2 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
+              Positions ({trades.filter((t) => t.status === 'open').length})
+            </h2>
+            <ExposureWarning />
+            <CompactPositions trades={trades} prices={prices} onSelectTicker={setSelectedTicker} />
+          </div>
+          <EarningsWidget tickers={watchlist} />
+          <NewsStrip ticker={selectedTicker} />
         </aside>
       </div>
 
