@@ -25,6 +25,7 @@ import {
 } from '@/lib/indicators';
 import { detectPatterns } from '@/lib/patterns';
 import StopDragHandles from './StopDragHandles';
+import SessionBands from './SessionBands';
 
 interface TradeMarker {
   time: number; // Unix timestamp in seconds
@@ -64,6 +65,8 @@ interface CandlestickChartProps {
   showPatterns?: boolean;
   /** Called when the user finishes dragging a stop line to a new price. */
   onStopDrag?: (tradeId: string, newPrice: number) => void;
+  /** Tint pre-market and after-hours bands behind the candles. */
+  showSessionBands?: boolean;
 }
 
 // Helper to extract trade markers from trades
@@ -184,6 +187,7 @@ export default function CandlestickChart({
   entryLines = [],
   showPatterns = false,
   onStopDrag,
+  showSessionBands = false,
 }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
@@ -896,6 +900,12 @@ export default function CandlestickChart({
         className="w-full relative"
         style={{ height: mainChartHeight }}
       >
+        <SessionBands
+          chartRef={chartRef}
+          containerRef={chartContainerRef}
+          height={mainChartHeight}
+          enabled={showSessionBands}
+        />
         {onStopDrag && stopLines.length > 0 && candlestickSeriesRef.current && (
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           <StopDragHandles

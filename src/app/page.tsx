@@ -611,6 +611,7 @@ export default function CommandCenterPage() {
                     showVWAP={indicators.vwap}
                     showBollinger={indicators.bollinger}
                     showPatterns={indicators.patterns ?? false}
+                    showSessionBands={extendedHours}
                     stopLines={trades
                       .filter((t) => t.status === 'open' && t.ticker === selectedTicker && t.stopPrice && t.stopPrice > 0)
                       .map((t) => ({ ticker: t.ticker, price: t.stopPrice!, tradeId: t.id }))}
