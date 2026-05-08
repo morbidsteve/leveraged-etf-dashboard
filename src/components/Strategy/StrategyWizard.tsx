@@ -5,6 +5,7 @@ import { Strategy, ConditionTree, ValueRef, Timeframe, StrategyMode } from '@/ty
 import { describeCondition } from '@/lib/strategy/conditions';
 import { parseCondition, ParseResult } from '@/lib/strategy/nlparser';
 import BlockBuilder from './BlockBuilder';
+import { importPine } from '@/lib/strategy/pineImporter';
 
 const COMMON_TICKERS = ['SOXL', 'TQQQ', 'SOXS', 'SQQQ', 'UPRO', 'TNA', 'LABU', 'TECL'];
 
@@ -15,7 +16,8 @@ type EntryGoal =
   | 'rsi_with_vwap'
   | 'natural_language'
   | 'block_builder'
-  | 'cross_asset_price';
+  | 'cross_asset_price'
+  | 'pine_import';
 
 type ExitGoal =
   | 'price_target_pct'
@@ -73,6 +75,9 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
   const [exitNL, setExitNL] = useState('');
   const [exitNLResult, setExitNLResult] = useState<ParseResult | null>(null);
   const [exitBlockTree, setExitBlockTree] = useState<ConditionTree>(DEFAULT_EXIT_BLOCK_TREE);
+  const [pineSource, setPineSource] = useState('');
+  const [pineResult, setPineResult] = useState<ConditionTree | null>(null);
+  const [pineError, setPineError] = useState<string>('');
 
   // Step 3: Risk / sizing / tickers / mode
   const [tickers, setTickers] = useState<string[]>(['SOXL']);
@@ -143,6 +148,8 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
           op: crossOp,
           right: { kind: 'literal', value: crossPrice },
         };
+      case 'pine_import':
+        return pineResult;
     }
   };
 
@@ -319,6 +326,11 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
                   title: 'Cross-asset price trigger',
                   body: 'Watch one ticker, trade another. E.g. "When SPY ≥ 600, buy TQQQ" — the watched ticker just needs to be in your watchlist for live monitoring.',
                 },
+                {
+                  id: 'pine_import',
+                  title: 'Import from TradingView Pine Script',
+                  body: 'Paste a Pine v5 expression (ta.crossover/ta.crossunder, comparisons, AND/OR/NOT) and we convert it to a ConditionTree.',
+                },
               ]}
             />
             {entryGoal === 'cross_asset_price' && (
@@ -394,7 +406,53 @@ export default function StrategyWizard({ onCreate, onCancel }: Props) {
                 </Field>
               </div>
             )}
-            {entryGoal !== 'natural_language' && entryGoal !== 'block_builder' && entryGoal !== 'cross_asset_price' && (
+            {entryGoal === 'pine_import' && (
+              <div className="space-y-2 pt-2 border-t border-white/5">
+                <label className="text-[10px] uppercase tracking-widest text-gray-500 block">
+                  Paste Pine Script
+                </label>
+                <textarea
+                  value={pineSource}
+                  onChange={(e) => setPineSource(e.target.value)}
+                  rows={5}
+                  spellCheck={false}
+                  placeholder="entry = ta.crossunder(ta.rsi(close, 250), 50) and close > ta.vwap"
+                  className="w-full font-mono text-[11px] bg-black/30 border border-white/10 rounded p-2 text-gray-200 resize-y"
+                />
+                <button
+                  onClick={() => {
+                    const r = importPine(pineSource);
+                    if (r.tree) {
+                      setPineResult(r.tree);
+                      setPineError('');
+                    } else {
+                      setPineResult(null);
+                      setPineError(r.errors.join(' · ') || 'Could not parse');
+                    }
+                  }}
+                  className="btn btn-outline text-xs"
+                  disabled={!pineSource.trim()}
+                >
+                  Parse
+                </button>
+                {pineResult && (
+                  <div className="text-[11px] text-profit font-mono">
+                    ✓ Parsed successfully
+                  </div>
+                )}
+                {pineError && (
+                  <div className="text-[11px] text-loss font-mono">
+                    ✗ {pineError}
+                  </div>
+                )}
+                <p className="text-[10px] text-gray-500 leading-relaxed">
+                  Supported: ta.rsi/ta.ema/ta.sma/ta.vwap, ta.crossover/ta.crossunder,
+                  comparisons (&gt; &lt; &gt;= &lt;= == !=), and / or / not.
+                  Strategy.entry/exit wrappers stripped automatically.
+                </p>
+              </div>
+            )}
+            {entryGoal !== 'natural_language' && entryGoal !== 'block_builder' && entryGoal !== 'cross_asset_price' && entryGoal !== 'pine_import' && (
               <Field label="Timeframe (optional)">
                 <select
                   value={entryTimeframe}
@@ -841,6 +899,7 @@ function autoName(entry: EntryGoal, exit: ExitGoal, tickers: string[]): string {
     natural_language: 'Custom',
     block_builder: 'Blocks',
     cross_asset_price: 'Cross-asset',
+    pine_import: 'Pine import',
   };
   const x: Record<ExitGoal, string> = {
     price_target_pct: 'target',

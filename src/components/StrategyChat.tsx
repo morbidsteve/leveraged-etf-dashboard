@@ -60,7 +60,7 @@ export default function StrategyChat() {
     }
   }, [messages]);
 
-  const send = () => {
+  const send = async () => {
     const text = input.trim();
     if (!text) return;
     const userMsg: ChatMessage = {
@@ -69,15 +69,58 @@ export default function StrategyChat() {
       content: text,
       timestamp: new Date(),
     };
-    const reply = handleQuestion(text);
-    const assistantMsg: ChatMessage = {
-      id: `a-${Date.now()}`,
-      role: 'assistant',
-      content: reply,
-      timestamp: new Date(),
-    };
-    setMessages((ms) => [...ms, userMsg, assistantMsg]);
+    setMessages((ms) => [...ms, userMsg]);
     setInput('');
+
+    // Try the real LLM first (if a key is configured server-side).
+    // If unconfigured / errors, fall through to the deterministic
+    // local interpreter — chat keeps working with no API key needed.
+    try {
+      const ctx: string[] = [];
+      ctx.push(`Strategies: ${strategies.map((s) => s.name).join(', ') || 'none'}`);
+      ctx.push(`Open trades: ${trades.filter((t) => t.status === 'open').length}`);
+      ctx.push(`Paper trades closed: ${paperClosed.length}`);
+      const r = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system:
+            `Trading-strategy assistant. User context:\n${ctx.join('\n')}\n` +
+            `Replies under 3 sentences unless asked for detail. No specific buy/sell recommendations.`,
+          messages: [
+            ...messages.map((m) => ({ role: m.role, content: m.content })),
+            { role: 'user', content: text },
+          ],
+        }),
+      });
+      const data = await r.json();
+      if (r.ok && data.reply) {
+        setMessages((ms) => [
+          ...ms,
+          {
+            id: `a-${Date.now()}`,
+            role: 'assistant',
+            content: data.reply,
+            timestamp: new Date(),
+          },
+        ]);
+        return;
+      }
+      throw new Error(data.error || 'no reply');
+    } catch {
+      const reply = handleQuestion(text);
+      setMessages((ms) => [
+        ...ms,
+        {
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          content:
+            reply +
+            '\n\n_(Local fallback. Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env for smarter replies.)_',
+          timestamp: new Date(),
+        },
+      ]);
+    }
   };
 
   const handleQuestion = (q: string): string => {
