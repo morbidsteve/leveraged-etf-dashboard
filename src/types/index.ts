@@ -256,6 +256,8 @@ export interface AppSettings {
     dailyLossLimit?: number;         // dollar amount; if day P&L drops below -X, strategies pause; 0/undefined = no cap
     extendedHours?: boolean;         // include pre/after-hours candles
   };
+  /** Master kill switch — when true, no auto-mode order is dispatched. */
+  killSwitch?: boolean;
   /** Auto-alert from entry price for every open position. */
   positionAlerts?: PositionAlertSettings;
 }

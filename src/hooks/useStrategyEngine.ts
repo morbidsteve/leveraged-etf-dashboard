@@ -52,6 +52,7 @@ export function useStrategyEngine(opts: {
   const closePosition = usePaperStore((s) => s.closePosition);
   const globalRsiConfig = useSettingsStore((s) => s.settings.rsiConfig);
   const guardrailsConfig = useSettingsStore((s) => s.settings.guardrails);
+  const killSwitch = useSettingsStore((s) => s.settings.killSwitch);
   const manualTrades = useTradeStore((s) => s.trades);
   const paperClosed = usePaperStore((s) => s.closed);
   const livePrices = usePriceStore((s) => s.prices);
@@ -292,6 +293,19 @@ export function useStrategyEngine(opts: {
         } else if (strategy.mode === 'manual_confirm') {
           opts.onPendingAction?.(action, strategy);
         } else if (strategy.mode === 'auto') {
+          // Master kill switch — block all live order dispatches but let
+          // the engine continue evaluating and notifying.
+          if (killSwitch) {
+            appendEvents([
+              {
+                strategyId: strategy.id,
+                timestamp: new Date(),
+                type: 'state_change',
+                detail: `🚫 Kill switch ON — Schwab order blocked: ${action.kind} ${action.shares} ${action.ticker}`,
+              },
+            ]);
+            continue;
+          }
           // Fire-and-forget POST to the server-side place-order route.
           // Tokens live server-side; the browser only forwards the action.
           dispatchAutoOrder(action, ctx.price, strategy)
@@ -380,6 +394,7 @@ export function useStrategyEngine(opts: {
     appendEvents,
     openPosition,
     closePosition,
+    killSwitch,
     opts,
   ]);
 }
