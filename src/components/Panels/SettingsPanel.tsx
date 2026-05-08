@@ -11,6 +11,7 @@ import WatchlistManager from './WatchlistManager';
 import TaxToolsCard from './TaxToolsCard';
 import ApiKeysCard from './ApiKeysCard';
 import WebhooksCard from './WebhooksCard';
+import EngineDiagnosticsCard from './EngineDiagnosticsCard';
 
 type SettingsTab = 'broker' | 'risk' | 'strategy' | 'watchlists' | 'scanner' | 'data' | 'help';
 
@@ -149,6 +150,7 @@ export default function SettingsPanel() {
         <div className="space-y-4">
           <SchwabConnectCard />
           <WorkerStatusPanel />
+          <EngineDiagnosticsCard />
           <ApiKeysCard />
           <WebhooksCard />
         </div>
